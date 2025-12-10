@@ -88,5 +88,6 @@ model ChatMessage {
   content   String
   sessionId String
   session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  imageUrl  String?
   createdAt DateTime    @default(now())
 }

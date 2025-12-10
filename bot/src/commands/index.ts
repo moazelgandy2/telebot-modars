@@ -101,10 +101,18 @@ export const setupCommands = (bot: Telegraf<Context>) => {
       const caption = ctx.message.caption || "Please analyze this image.";
 
       const userId = ctx.from.id;
-      await addToHistory(userId, "user", caption);
+      // Save caption AND imageUrl to DB
+      await addToHistory(userId, "user", caption, imageUrl);
+
+      // Get history (now includes the image in the last message)
       const history = await getHistory(userId);
 
+      // We still pass imageUrl to generateResponse just in case, or we can rely on history.
+      // But based on my openai.ts logic, if it's in history, it handles it.
+      // If I pass it again, my logic deduplicates or appends.
+      // Let's pass it to be safe, as my logic handles "string" content conversion.
       const response = await generateResponse(history, imageUrl);
+
       await ctx.reply(response);
       await addToHistory(userId, "model", response);
 

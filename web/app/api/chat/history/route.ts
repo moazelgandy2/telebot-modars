@@ -21,46 +21,51 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(session?.messages || []);
   } catch (error) {
-    console.error("Error fetching chat history:", error);
-    return NextResponse.json({ error: "Failed to fetch history" }, { status: 500 });
+    console.error("Error fetching history:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const { userId, role, content } = await req.json();
+    const { userId, role, content, imageUrl } = await req.json();
 
     if (!userId || !role || !content) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing required fields" },
+        { status: 400 }
+      );
     }
 
-    // Upsert session (create if not exists)
-    const session = await prisma.chatSession.upsert({
+    let session = await prisma.chatSession.findUnique({
       where: { userId },
-      update: {},
-      create: { userId },
     });
 
-    // Add message
+    if (!session) {
+      session = await prisma.chatSession.create({
+        data: { userId },
+      });
+    }
+
     const message = await prisma.chatMessage.create({
       data: {
         sessionId: session.id,
         role,
         content,
+        imageUrl,
       },
-      // Select minimal fields for performance
-      select: {
-         id: true,
-         role: true,
-         content: true,
-         createdAt: true
-      }
     });
 
     return NextResponse.json(message);
   } catch (error) {
-    console.error("Error saving chat message:", error);
-    return NextResponse.json({ error: "Failed to save message" }, { status: 500 });
+    console.error("Error saving message:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
 
