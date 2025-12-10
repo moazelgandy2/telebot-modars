@@ -75,19 +75,7 @@ export const setupCommands = (bot: Telegraf<Context>) => {
   );
 
   bot.command("model", (ctx) => {
-    const model = ctx.message.text.split(" ")[1]?.toLowerCase();
-    const models: Record<string, string> = {
-      gemini: "Google Gemini 🧠",
-      mistral: "Mistral AI 🌪️",
-      openai: "OpenAI (ChatGPT) 🤖",
-    };
-
-    if (model && models[model]) {
-      setGlobalModel(model as any);
-      ctx.reply(`تمام! تم التبديل إلى ${models[model]}`);
-    } else {
-      ctx.reply("اختر موديل:\n/model gemini\n/model mistral\n/model openai");
-    }
+    ctx.reply("حالياً أنا شغال بنظام OpenAI المطور (ChatGPT) بس 🤖");
   });
 
   bot.on(message("photo"), async (ctx) => {
