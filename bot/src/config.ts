@@ -7,6 +7,8 @@ export interface Config {
   mistralApiKey?: string;
   openaiApiKey?: string;
   apiBaseUrl: string;
+  webhookDomain?: string;
+  port: number;
 }
 
 export const config: Config = {
@@ -15,6 +17,8 @@ export const config: Config = {
   mistralApiKey: process.env.MISTRAL_API_KEY,
   openaiApiKey: process.env.OPENAI_API_KEY,
   apiBaseUrl: process.env.API_BASE_URL || "http://localhost:3000/api",
+  webhookDomain: process.env.WEBHOOK_DOMAIN,
+  port: parseInt(process.env.PORT || "3000", 10),
 };
 
 export default config;
