@@ -1,8 +1,9 @@
 [phases.setup]
 nixPkgs = ["nodejs", "npm", "openssl"]
+cmds = ["corepack enable"]
 
 [phases.install]
-cmds = ["npm install"]
+cmds = ["pnpm install --frozen-lockfile=false"]
 
 [phases.build]
-cmds = ["npm install", "npm run build --workspace=web"]
+cmds = ["pnpm --filter web build"]
