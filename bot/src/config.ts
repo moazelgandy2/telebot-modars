@@ -8,6 +8,7 @@ export interface Config {
   openaiApiKey?: string;
   apiBaseUrl: string;
   webhookDomain?: string;
+  useWebhook: boolean;
   port: number;
 }
 
@@ -18,6 +19,7 @@ export const config: Config = {
   openaiApiKey: process.env.OPENAI_API_KEY,
   apiBaseUrl: process.env.API_BASE_URL || "http://localhost:3000/api",
   webhookDomain: process.env.WEBHOOK_DOMAIN,
+  useWebhook: process.env.USE_WEBHOOK === "true",
   port: parseInt(process.env.PORT || "3000", 10),
 };
 
