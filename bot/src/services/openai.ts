@@ -188,7 +188,7 @@ export const generateResponse = async (
     }
   }
 
-  let retries = 2;
+  let retries = 0;
   while (retries >= 0) {
     try {
       const response = await client.chat.completions.create({
