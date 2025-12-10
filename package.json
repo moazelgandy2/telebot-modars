@@ -2,11 +2,10 @@
   "name": "telebot-monorepo",
   "version": "1.0.0",
   "private": true,
-  "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "dev:bot": "pnpm --filter bot dev",
-    "dev:web": "pnpm --filter web dev",
-    "build": "pnpm -r build"
+    "dev:bot": "npm --filter bot dev",
+    "dev:web": "npm --filter web dev",
+    "build": "npm -r build"
   },
   "devDependencies": {
     "typescript": "^5"
