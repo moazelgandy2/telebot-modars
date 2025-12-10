@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { getCourses } from "../actions/courses";
 import { CoursesClient } from "@/components/courses-client";
 

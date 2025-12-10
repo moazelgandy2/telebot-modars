@@ -1,18 +1,28 @@
-'use server';
+"use server";
 
-import { prisma } from '@/lib/db';
-import { revalidatePath } from 'next/cache';
-import { Contact } from '@prisma/client';
+import { prisma } from "@/lib/db";
+import { revalidatePath, unstable_noStore as noStore } from "next/cache";
+import { Contact } from "@prisma/client";
 
 export type ContactData = Contact;
 
 export async function getContactData(): Promise<ContactData> {
+  noStore();
   const contact = await prisma.contact.findFirst();
   if (!contact) {
     // Should verify seed ran, but return default if empty
     return {
-      phone: '', whatsapp: '', email: '', facebook: '', instagram: '', workingHours: '',
-      id: 0, createdAt: new Date(), updatedAt: new Date(), responseTime: null, paymentMethods: {}
+      phone: "",
+      whatsapp: "",
+      email: "",
+      facebook: "",
+      instagram: "",
+      workingHours: "",
+      id: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      responseTime: null,
+      paymentMethods: {},
     };
   }
   return contact;
@@ -37,7 +47,7 @@ export async function updateContactData(data: ContactData): Promise<void> {
       facebook: data.facebook,
       instagram: data.instagram,
       workingHours: data.workingHours,
-    }
+    },
   });
-  revalidatePath('/contact');
+  revalidatePath("/contact");
 }

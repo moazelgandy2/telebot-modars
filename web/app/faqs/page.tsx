@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { getFaqs } from "../actions/faqs";
 import { FaqsClient } from "@/components/faqs-client";
 
