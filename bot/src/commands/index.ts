@@ -8,57 +8,7 @@ import {
 import { logConversation } from "../utils/conversationLogger.js";
 import { addToHistory, getHistory, clearHistory } from "../utils/memory.js";
 
-// Buffer for debouncing messages
-const userBuffers = new Map<
-  number,
-  { lines: string[]; timeout: NodeJS.Timeout; ctx: Context }
->();
-
-const processBufferedMessages = async (userId: number) => {
-  const buffer = userBuffers.get(userId);
-  if (!buffer) return;
-
-  userBuffers.delete(userId); // Clear buffer
-  const { lines, ctx } = buffer;
-  const combinedMessage = lines.join("\n");
-
-  try {
-    // Add user message to memory
-    await addToHistory(userId, "user", combinedMessage);
-
-    // Get full history for context
-    const history = await getHistory(userId);
-
-    // Show typing indicator
-    await ctx.telegram.sendChatAction(ctx.chat!.id, "typing");
-
-    // Generate response using AI Manager (checks preference)
-    const response = await generateResponse(
-      history,
-      undefined,
-      async (intermediateMsg: string) => {
-        // Send intermediate message
-        await ctx.reply(intermediateMsg);
-      }
-    );
-    await ctx.reply(response);
-
-    // Add model response to memory
-    // Add model response to memory
-    await addToHistory(userId, "model", response);
-
-    // Log the conversation
-    await logConversation(
-      userId,
-      ctx.from?.username || ctx.from?.first_name || "Unknown",
-      combinedMessage,
-      response
-    );
-  } catch (error) {
-    console.error("Error generating response:", error);
-    await ctx.reply("معلش، حصلت مشكلة. جرب تاني.");
-  }
-};
+// No buffering for Serverless compatibility
 
 export const setupCommands = (bot: Telegraf<Context>) => {
   bot.command("start", async (ctx) => {
@@ -120,18 +70,37 @@ export const setupCommands = (bot: Telegraf<Context>) => {
     const userId = ctx.from.id;
     const text = ctx.message.text;
 
-    if (userBuffers.has(userId)) {
-      const buffer = userBuffers.get(userId)!;
-      clearTimeout(buffer.timeout);
-      buffer.lines.push(text);
-      buffer.ctx = ctx; // Update context to latest
-      buffer.timeout = setTimeout(() => processBufferedMessages(userId), 3000);
-    } else {
-      userBuffers.set(userId, {
-        lines: [text],
-        ctx: ctx,
-        timeout: setTimeout(() => processBufferedMessages(userId), 3000),
-      });
+    try {
+      // Add user message to memory
+      await addToHistory(userId, "user", text);
+
+      // Get full history
+      const history = await getHistory(userId);
+
+      // Show typing indicator
+      await ctx.telegram.sendChatAction(ctx.chat.id, "typing");
+
+      // Generate response
+      const response = await generateResponse(
+        history,
+        undefined,
+        async (intermediateMsg) => {
+          await ctx.reply(intermediateMsg);
+        }
+      );
+
+      await ctx.reply(response);
+      await addToHistory(userId, "model", response);
+
+      await logConversation(
+        userId,
+        ctx.from.username || ctx.from.first_name || "Unknown",
+        text,
+        response
+      );
+    } catch (error) {
+      console.error("Error processing text:", error);
+      await ctx.reply("معلش، حصلت مشكلة. جرب تاني.");
     }
   });
 };
