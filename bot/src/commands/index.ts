@@ -24,10 +24,10 @@ const processBufferedMessages = async (userId: number) => {
 
   try {
     // Add user message to memory
-    addToHistory(userId, "user", combinedMessage);
+    await addToHistory(userId, "user", combinedMessage);
 
     // Get full history for context
-    const history = getHistory(userId);
+    const history = await getHistory(userId);
 
     // Show typing indicator
     await ctx.telegram.sendChatAction(ctx.chat!.id, "typing");
@@ -44,7 +44,8 @@ const processBufferedMessages = async (userId: number) => {
     await ctx.reply(response);
 
     // Add model response to memory
-    addToHistory(userId, "model", response);
+    // Add model response to memory
+    await addToHistory(userId, "model", response);
 
     // Log the conversation
     await logConversation(
@@ -60,8 +61,8 @@ const processBufferedMessages = async (userId: number) => {
 };
 
 export const setupCommands = (bot: Telegraf<Context>) => {
-  bot.command("start", (ctx) => {
-    clearHistory(ctx.from.id);
+  bot.command("start", async (ctx) => {
+    await clearHistory(ctx.from.id);
     ctx.reply(
       "أهلاً! 😊 أنا مساعد الأستاذ. اسألني عن الكورسات والمواعيد والأسعار."
     );
@@ -100,12 +101,12 @@ export const setupCommands = (bot: Telegraf<Context>) => {
       const caption = ctx.message.caption || "Please analyze this image.";
 
       const userId = ctx.from.id;
-      addToHistory(userId, "user", caption);
-      const history = getHistory(userId);
+      await addToHistory(userId, "user", caption);
+      const history = await getHistory(userId);
 
       const response = await generateResponse(history, imageUrl);
       await ctx.reply(response);
-      addToHistory(userId, "model", response);
+      await addToHistory(userId, "model", response);
 
       await logConversation(
         ctx.from.id,

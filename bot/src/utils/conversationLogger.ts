@@ -24,6 +24,9 @@ export const logConversation = async (
   message: string,
   response: string
 ) => {
+  // Only log in non-production environments
+  if (process.env.NODE_ENV === "production") return;
+
   await ensureLogDir();
   const filePath = path.join(LOG_DIR, LOG_FILE);
   const exists = await fs

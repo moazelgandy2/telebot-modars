@@ -149,16 +149,16 @@ export const generateResponse = async (
 
           switch (toolCall.function.name) {
             case "get_course_info":
-              toolResult = getCoursesSummary();
+              toolResult = await getCoursesSummary();
               break;
             case "get_contact":
-              toolResult = getContactInfo();
+              toolResult = await getContactInfo();
               break;
             case "get_faqs":
-              toolResult = getFAQs();
+              toolResult = await getFAQs();
               break;
             case "get_locations":
-              toolResult = getLocationDetails();
+              toolResult = await getLocationDetails();
               break;
           }
 

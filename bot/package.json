@@ -1,0 +1,29 @@
+{
+  "name": "bot",
+  "dependencies": {
+    "@google/genai": "^1.32.0",
+    "@mistralai/mistralai": "^1.10.0",
+    "@prisma/client": "^5.22.0",
+    "@types/express": "^5.0.6",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "mime": "^4.1.0",
+    "openai": "^6.10.0",
+    "telegraf": "^4.16.3"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch main.ts",
+    "build": "tsc",
+    "admin": "tsx admin-server.ts",
+    "generate": "prisma generate --schema=../web/prisma/schema.prisma"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.2",
+    "nodemon": "^3.1.11",
+    "prisma": "5.22.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
