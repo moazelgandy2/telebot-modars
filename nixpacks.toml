@@ -7,3 +7,6 @@ cmds = ["pnpm install --frozen-lockfile=false"]
 
 [phases.build]
 cmds = ["pnpm --filter web build"]
+
+[start]
+cmd = "pnpm --filter web start"
