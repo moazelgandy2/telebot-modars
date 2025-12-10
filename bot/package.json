@@ -15,6 +15,7 @@
   "scripts": {
     "dev": "tsx watch main.ts",
     "build": "prisma generate --schema=../web/prisma/schema.prisma && tsc && node -e \"const fs=require('fs'); fs.mkdirSync('public',{recursive:true}); fs.writeFileSync('public/favicon.ico', '')\"",
+    "start": "node dist/main.js",
     "admin": "tsx admin-server.ts",
     "generate": "prisma generate --schema=../web/prisma/schema.prisma"
   },
