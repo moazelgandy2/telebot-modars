@@ -7,6 +7,19 @@ import { logConversation } from "../utils/conversationLogger.js";
 import { addToHistory, getHistory, clearHistory } from "../utils/memory.js";
 import { uploadImage } from "../utils/uploader.js";
 
+const getSenderName = (sender: any): string => {
+   let name = "Unknown";
+   if ('firstName' in sender && sender.firstName) {
+       name = sender.firstName;
+   } else if ('title' in sender && sender.title) {
+       name = sender.title;
+   }
+   if ('username' in sender && sender.username) {
+       name += ` (@${sender.username})`;
+   }
+   return name;
+};
+
 export const setupCommands = (client: TelegramClient) => {
   // Handle new messages (Text & Photo)
   client.addEventHandler(async (event: NewMessageEvent) => {
@@ -39,27 +52,22 @@ export const setupCommands = (client: TelegramClient) => {
     // 2. Handle Photo
     if (isPhoto) {
       try {
-        const caption = message.text || "Please analyze this image.";
-        console.log("[DEBUG] Photo detected. Starting download...");
+        const caption = message.text || "";
 
         // Download media into a Buffer
         const buffer = await client.downloadMedia(message.media!, {}) as Buffer;
 
         if (!buffer) {
-             console.log("[DEBUG] Failed to download photo: Buffer is empty.");
              await message.reply({ message: "فشل تحميل الصورة. حاول تاني." });
              return;
         }
-        console.log(`[DEBUG] Photo downloaded. Buffer size: ${buffer.length} bytes.`);
 
         // Upload to Cloudinary
-        console.log("[DEBUG] Uploading to Cloudinary...");
         let imageUrl = "";
         try {
             imageUrl = await uploadImage(buffer);
-            console.log(`[DEBUG] Upload successful: ${imageUrl}`);
         } catch (uploadError) {
-             console.error("[DEBUG] Cloudinary upload failed:", uploadError);
+             console.error("Cloudinary upload failed:", uploadError);
              await message.reply({ message: "فشل رفع الصورة للسيرفر. تأكد من الإعدادات." });
              return;
         }
@@ -67,7 +75,6 @@ export const setupCommands = (client: TelegramClient) => {
         const sender = await message.getSender();
         if (!sender || !('id' in sender)) return;
         const userId = Number(sender.id);
-        console.log(`[DEBUG] Sender ID: ${userId}`);
 
         // Log text part AND image URL
         await addToHistory(userId, "user", caption, imageUrl);
@@ -79,31 +86,19 @@ export const setupCommands = (client: TelegramClient) => {
             imageUrl, // Pass the URL here
             async (msg) => { await message.reply({ message: msg }); }
         );
-        console.log("[DEBUG] AI Response received.");
 
         await message.reply({ message: response });
         await addToHistory(userId, "model", response);
 
-        // Get name safely (duplicated logic, could be helper but inline for now)
-        let name = "Unknown";
-        if ('firstName' in sender && sender.firstName) {
-            name = sender.firstName;
-        } else if ('title' in sender && sender.title) {
-            name = sender.title;
-        }
-        if ('username' in sender && sender.username) {
-            name += ` (@${sender.username})`;
-        }
-
         await logConversation(
             userId,
-            name,
+            getSenderName(sender),
             `[Image: ${imageUrl}] ${caption}`,
             response
         );
 
       } catch (error) {
-        console.error("[DEBUG] Error processing photo:", error);
+        console.error("Error processing photo:", error);
         await message.reply({ message: "حصل مشكلة وأنا بحلل الصورة. معلش جرب تاني." });
       }
       return;
@@ -138,20 +133,9 @@ export const setupCommands = (client: TelegramClient) => {
             await message.reply({ message: response });
             await addToHistory(userId, "model", response);
 
-            // Get name safely
-            let name = "Unknown";
-            if ('firstName' in sender && sender.firstName) {
-                name = sender.firstName;
-            } else if ('title' in sender && sender.title) {
-                name = sender.title;
-            }
-            if ('username' in sender && sender.username) {
-                name += ` (@${sender.username})`;
-            }
-
              await logConversation(
                 userId,
-                name,
+                getSenderName(sender),
                 text,
                 response
             );
