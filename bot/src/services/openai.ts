@@ -3,76 +3,213 @@ import { config } from "../config.js";
 import { ChatMessage } from "../utils/memory.js";
 import {
   getCoursesSummary,
-  getContactInfo,
-  getFAQs,
+  getPrices,
   getLocationDetails,
+  getFAQs,
+  getContactInfo,
+  searchCourses,
+  getCourseById,
+  getAllSubjects,
+  getAllLevels,
+  searchFAQs,
+  searchLocations,
+  getScheduleSummary,
+  getPaymentMethods,
+  getBookList
 } from "../utils/courseHelpers.js";
 
+// ... (previous code remains same until tools array)
+
+const tools = [
+  {
+    type: "function" as const,
+    function: {
+      name: "get_course_info",
+      description: "Returns all courses with full details: subject, level, centers, online options, schedules, prices, and books. Use for general queries like 'Times', 'Schedule'.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_prices",
+      description: "Returns all prices from courses, including center, online, and book prices.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_locations",
+      description: "Returns all teaching center locations: name, address, map link, and optional working hours.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_faqs",
+      description: "Returns all frequently asked questions and their answers.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_contacts",
+      description: "Returns contact information: phone, WhatsApp, email, social links, working hours, response time, and payment methods.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "search_courses",
+      description: "Lets users search courses by keyword (subject, level, center, or online platform).",
+      parameters: {
+        type: "object",
+        properties: {
+          keyword: { type: "string", description: "Search keyword e.g. 'Physics', 'Online'" },
+        },
+        required: ["keyword"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_course_by_id",
+      description: "Returns details of a specific course by its ID.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Course ID" },
+        },
+        required: ["id"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_all_subjects",
+      description: "Returns a unique list of all subjects available in the DB.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_all_levels",
+      description: "Returns a list of all levels available in the DB.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "search_faqs",
+      description: "Searches FAQs by keyword and returns matching Q&A.",
+      parameters: {
+        type: "object",
+        properties: {
+          keyword: { type: "string", description: "Keyword to search in FAQs" },
+        },
+        required: ["keyword"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "search_locations",
+      description: "Searches centers by keyword or location.",
+      parameters: {
+        type: "object",
+        properties: {
+          keyword: { type: "string", description: "Center name or area" },
+        },
+        required: ["keyword"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_schedule_summary",
+      description: "Returns all course schedules in a compact summary format.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_payment_methods",
+      description: "Returns the available payment methods from the contact table.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "get_book_list",
+      description: "Returns all books available for courses with their prices.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+];
+
 const formatForTelegram = (text: string): string => {
-  return text
-    .replace(/\n{3,}/g, "\n\n") // Max 2 consecutive newlines
-    .replace(/  +/g, " ") // Remove extra spaces
-    .replace(/(📌[^\n]+)\n-/g, "$1\n\n-") // Space after headers
-    .split("\n")
-    .map((line) => line.trim())
-    .join("\n")
-    .trim();
+  return text.trim();
 };
 
-const systemInstruction = `You are Telebot Assistant (مساعد تلي بوت).
-## CORE RULE: NO QUESTIONS. NO CONFIRMATION.
-- **Goal**: Give the answer IMMEDIATELY in a scannable format.
-- **Forbidden**: "Do you mean...?", "Which one?", "I will send you...".
-- **REQUIRED**: Start directly with the data. "Here are the schedules:".
+const systemInstruction = `You are **Moaz's Admin**, a helpful senior student (Human).
 
-## formatting Rules (STRICT Output)
-- **TRANSLATE TO ARABIC**: The tools return data in English (e.g., "Sat", "Sun", "1st Sec", "Physics"). You **MUST TRANSLATE** these to Arabic (e.g., "السبت", "الأحد", "أولى ثانوي", "فيزياء"). NEVER output English words for days/grades.
-- **Group by Subject**: Group data to be scannable.
-  - **فيزياء**:
-    - أولى: سبت 5م - 100ج
-    - ثانية: أحد 3م - 120ج
+## 🎭 PERSONA & TONE
+- **Role:** Admin for a Thanaweya Amma Platform.
+- **Language:** Natural Egyptian Arabic (عامية).
+- **Allowed Slang:** (يا بطل - يا هندسة - يا دكترة - يا غالي - عاش - اشطا - خلصانة - ولا يهمك).
+- **Vibe:** Short, fast, supportive. "One of the guys."
 
-## Logic & Flow
-- **No Hallucinated Greetings**: If user says "Salam", just reply to the greeting. DO NOT offer data yet.
-- **No Echoing**: Do not repeat the question.
-- **Vision Logic**: If user sends an image of a problem/question, **SOLVE IT**. Do not give generic advice. Assume role of a Physics/Math Tutor for that specific turn.
+## 🚫 STRICT BOUNDARIES (CRITICAL)
+1. **SCOPE:** You cover **ALL** Thanaweya Amma subjects (Physics, Math, Chem, Bio, Geo, Arabic, English, French).
+   - **FORBIDDEN:** You do NOT know CS, Programming, or College courses.
+   - If asked about Code/Java/CS: Say: "ايه ده يا هندسة؟ دي برمجة 😂 أنا تخصصي ثانوية عامة وبس، هات حاجة في المنهج."
+2. **NO ROBOTIC TECH SUPPORT:**
+   - If "Site is down/Lagging": Say: "معلش يا بطل، تلاقي ضغط على السيرفر. جرب تقلل الجودة لـ 360، ولو لسه بايظ ابعتلي ونشوفلك حل."
+3. **NO SPAM:** Do NOT paste the Subscription Steps unless the user explicitly asks "How do I subscribe?" or "Details".
 
-## Dialect
-- Polite Egyptian Arabic (عامية مهذبة).
-- Titles: "يا فندم".
-- Symbol Ban: NEVER use \`月\`. Use \`شهر\`.
+## 🧠 RESPONSE STRATEGY
 
-## Tool Triggers (Smart)
-  - If user asks about "Physics", SHOW ALL PHYSICS DATA. Do not ask "Which level?". Show ALL of them.
-  - If user asks about "Center", SHOW ALL CENTERS. Do not ask "Which center?".
-  - If user asks about "Times", SHOW ALL TIMES for the context you have.
-  - IF YOU CALL A TOOL, PRINT THE RESULT IMMEDIATELY.
-  - **NEVER** ask the user to clarify before showing data. Show the data FIRST, then ask if they need more.
-  - **Expand, Don't Repeat**: If user asks "More details" (تفاصيل اكتر), DO NOT repeat the schedule. Show **Prices** or **Location Maps**.
+### 1. ACADEMIC HELP (All Subjects)
+- **User:** Asks about Grammar, Physics Rule, Bio definition, Translation.
+- **You:** Answer in **1-2 sentences max**. Simplify it.
+- **Example (Arabic):** "الممنوع من الصرف؟ بص يا سيدي، هو اسم مبيتنوّنش، وبيجر بالفتحة لو مفيش (ال) ولا مضاف. بس كدة."
+- **Example (Bio):** "الفرق بين الدعامة الفسيولوجية والتركيبة؟ الفسيولوجية بتعتمد على المياه (مؤقتة)، التركيبة بتعتمد على ترسيب مواد (دائمة)."
 
-## Dialect
-- Polite Egyptian Arabic (عامية مهذبة).
-- Titles: "يا فندم".
-- Symbol Ban: NEVER use \`月\`. Use \`شهر\`.
+### 2. SUBSCRIPTION ("How to join")
+- **Trigger:** "اشترك ازاي", "تفاصيل", "عايز ادخل".
+- **Response:**
+"عشان تنجز وتدخل السيستم:
+1️⃣ حول المبلغ كاش على: 01124145324
+2️⃣ سجل بياناتك هنا: 🔗 https://forms.gle/8USC1EgQzMYe7Nqo6
+3️⃣ ابعتلي اسكرين التحويل واسمك هنا.
+بس كدة وهضيفك فوراً 🚀"
 
-## Tool Triggers (Smart)
-1. Schedule/Subjects -> \`get_course_info\`
-2. Address/Location -> \`get_locations\`
-3. Price/Cost/Online -> \`get_faqs\`
-4. Phone/Contact -> \`get_contact\`
-5. "More details" -> Call \`get_faqs\` AND \`get_locations\` together.
+### 3. PANIC / TRAKOMAT
+- **User:** "أنا ضايع", "مراكم مواد".
+- **You:** "يا عم بسيطة، متوترش نفسك. قوللي بس ايه أكتر مادة مزعلاك دلوقتي؟"
 
-## Examples
-User: "مواعيد الفيزياء"
-Assistant: [Calls get_course_info] -> "دي كل مواعيد الفيزياء:
-- فيزياء (أولى): سبت 5م
-- فيزياء (ثانوية): أحد 3م
-أي خدمة تانية؟"
+### 4. GREETINGS
+- **User:** "السلام عليكم"
+- **You:** "وعليكم السلام يا هندسة/يا دكترة، اؤمرني؟"
 
-User: "تفاصيل اكتر"
-Assistant: [Calls get_faqs + get_locations] -> "بالنسبة للمصاريف والعنوان:
-- السعر: 350ج/شهر
-- المكان: سنتر الكوربة (اللوكيشن: ...)"`;
+## 🧪 CHECKS BEFORE SENDING
+- Did I explain a CS concept? -> **STOP.** Refuse jokingly.
+- Did I paste the subscription steps when they didn't ask? -> **DELETE.**
+- Is my answer longer than 3 lines? -> **SHORTEN.**
+`;
+
 
 const endpoint = "https://chatgptprojapi.services.ai.azure.com/";
 const apiVersion = "2024-08-01-preview";
@@ -84,45 +221,6 @@ const client = new AzureOpenAI({
   apiVersion: apiVersion,
   deployment: deployment,
 });
-
-const tools = [
-  {
-    type: "function" as const,
-    function: {
-      name: "get_course_info",
-      description:
-        "Fetches COURSE SCHEDULES, SUBJECTS, and TEACHERS. Use this when the user asks about: 'Dates' (مواعيد), 'Schedule' (جدول), 'Classes' (حصة), or specific subjects like 'Physics' (فيزياء), 'Arabic' (عربي). DO NOT use for general location questions.",
-      parameters: { type: "object", properties: {}, required: [] },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "get_locations",
-      description:
-        "Fetches PHYSICAL ADDRESSES and GOOGLE MAPS LINKS. Use this when the user asks: 'Where' (فين), 'Address' (عنوان), 'Location' (لوكيشن), 'Center' (السنتر).",
-      parameters: { type: "object", properties: {}, required: [] },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "get_faqs",
-      description:
-        "Fetches PRICING, DISCOUNTS, ONLINE SYSTEMS, and PAYMENT DETAILS. Use this when the user asks: 'Price' (بكام/سعر), 'Cost' (مصاريف), 'Online' (أونلاين), 'Payment' (دفع), 'Discount' (خصم).",
-      parameters: { type: "object", properties: {}, required: [] },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "get_contact",
-      description:
-        "Fetches PHONE NUMBERS, SOCIAL LINKS, and ADMIN CONTACTS. Use this when the user asks: 'Number' (رقم), 'Phone' (تليفون), 'WhatsApp' (واتساب), 'Management' (إدارة), 'Human' (عايز اكلم حد).",
-      parameters: { type: "object", properties: {}, required: [] },
-    },
-  },
-];
 
 export const generateResponse = async (
   history: ChatMessage[],
@@ -154,21 +252,6 @@ export const generateResponse = async (
   ];
 
   if (imageUrl) {
-    // If imageUrl is provided for the current turn, append it to the last user message
-    // Note: The caller (commands/ts) likely added the text part to history already
-    // but the imageUrl argument is passed separately.
-    // However, if we saved it to history with imageUrl, it might be duplicated if we blindly add it again.
-    // But commands/ts adds to history BEFORE calling generateResponse.
-    // Let's check commands/ts.
-    // commands/ts: await addToHistory(userId, "user", caption); <--- No imageUrl yet
-    // So the history contains only text.
-    // So we MUST attach the imageUrl to the last message here.
-
-    // Wait, if I update commands/ts to save imageUrl, then history WILL have it.
-    // So "imageUrl" arg might become redundant if we reload history.
-    // But for now, let's keep the logic:
-    // If the last message in history is a user string (no image yet), attach it.
-
     if (messages.length > 0) {
       const lastMsg = messages[messages.length - 1];
       if (lastMsg.role === "user") {
@@ -178,7 +261,6 @@ export const generateResponse = async (
                 { type: "image_url", image_url: { url: imageUrl } },
             ];
         } else if (Array.isArray(lastMsg.content)) {
-            // Check if image already exists
             const hasImage = lastMsg.content.some((c: any) => c.type === "image_url" && c.image_url?.url === imageUrl);
             if (!hasImage) {
                  lastMsg.content.push({ type: "image_url", image_url: { url: imageUrl } });
@@ -204,7 +286,6 @@ export const generateResponse = async (
       const message = choice.message;
 
       if (message.tool_calls) {
-        // Send loading message with variety
         if (sendIntermediateMessage) {
           const msgs = ["لحظة... ⏳", "خليني أشيك 🔍", "ثانية واحدة ⏱️"];
           await sendIntermediateMessage(
@@ -217,20 +298,61 @@ export const generateResponse = async (
         for (const toolCall of message.tool_calls) {
           if (toolCall.type === "function") {
             let toolResult = "";
+            let args = {};
+            try {
+                if (toolCall.function.arguments) {
+                    args = JSON.parse(toolCall.function.arguments);
+                }
+            } catch (e) {
+                console.error("Error parsing arguments", e);
+            }
 
             switch (toolCall.function.name) {
               case "get_course_info":
                 toolResult = await getCoursesSummary();
                 break;
-              case "get_contact":
-                toolResult = await getContactInfo();
-                break;
-              case "get_faqs":
-                toolResult = await getFAQs();
+              case "get_prices":
+                toolResult = await getPrices();
                 break;
               case "get_locations":
                 toolResult = await getLocationDetails();
                 break;
+              case "get_faqs":
+                toolResult = await getFAQs();
+                break;
+              case "get_contacts": // Renamed from get_contact to match request
+              case "get_contact":  // Fallback
+                toolResult = await getContactInfo();
+                break;
+              case "search_courses":
+                toolResult = await searchCourses((args as any).keyword || "");
+                break;
+              case "get_course_by_id":
+                toolResult = await getCourseById((args as any).id || "");
+                break;
+              case "get_all_subjects":
+                toolResult = await getAllSubjects();
+                break;
+              case "get_all_levels":
+                toolResult = await getAllLevels();
+                break;
+              case "search_faqs":
+                toolResult = await searchFAQs((args as any).keyword || "");
+                break;
+              case "search_locations":
+                toolResult = await searchLocations((args as any).keyword || "");
+                break;
+              case "get_schedule_summary":
+                toolResult = await getScheduleSummary();
+                break;
+              case "get_payment_methods":
+                toolResult = await getPaymentMethods();
+                break;
+              case "get_book_list":
+                toolResult = await getBookList();
+                break;
+              default:
+                toolResult = "Unknown tool executed.";
             }
 
             messages.push({
@@ -240,6 +362,7 @@ export const generateResponse = async (
             });
           }
         }
+// ...
 
         const finalResponse = await client.chat.completions.create({
           messages: messages as any,
@@ -260,8 +383,28 @@ export const generateResponse = async (
         throw new Error("Empty content");
       }
       return formatForTelegram(content);
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Attempt failed. Retries left: ${retries}`, error);
+
+      // Handle Image Error (400 Bad Request: image url can not be accessed)
+      if (error?.status === 400 && error?.error?.message?.includes("image")) {
+          console.warn("Image access failed. Retrying without images...");
+
+          // Strip images from messages
+          messages.forEach(m => {
+              if (Array.isArray(m.content)) {
+                  m.content = m.content
+                    .filter((c: any) => c.type === "text")
+                    .map((c: any) => c.text)
+                    .join("\n") + "\n[Image was here but expired]";
+              }
+          });
+
+          // Retry immediately without decrementing generic retries too much, or just continue loop
+          // We modified 'messages' in place, so next loop iteration uses text-only messages.
+          continue;
+      }
+
       retries--;
       if (retries < 0) {
         return "معلش، الشبكة بتعلق شوية. ثانية واحدة وهجرب أرد عليك تاني... 🔄";

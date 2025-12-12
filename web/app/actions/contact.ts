@@ -22,7 +22,7 @@ export async function getContactData(): Promise<ContactData> {
       createdAt: new Date(),
       updatedAt: new Date(),
       responseTime: null,
-      paymentMethods: {},
+      paymentMethods: [],
     };
   }
   return contact;
@@ -39,6 +39,8 @@ export async function updateContactData(data: ContactData): Promise<void> {
       facebook: data.facebook,
       instagram: data.instagram,
       workingHours: data.workingHours,
+      responseTime: data.responseTime,
+      paymentMethods: data.paymentMethods ?? [],
     },
     create: {
       phone: data.phone,
@@ -47,6 +49,8 @@ export async function updateContactData(data: ContactData): Promise<void> {
       facebook: data.facebook,
       instagram: data.instagram,
       workingHours: data.workingHours,
+      responseTime: data.responseTime,
+      paymentMethods: data.paymentMethods ?? [],
     },
   });
   revalidatePath("/contact");

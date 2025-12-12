@@ -5,6 +5,7 @@ import {
 } from "../services/aiManager.js";
 import { logConversation } from "../utils/conversationLogger.js";
 import { addToHistory, getHistory, clearHistory } from "../utils/memory.js";
+import { uploadImage } from "../utils/uploader.js";
 
 export const setupCommands = (client: TelegramClient) => {
   // Handle new messages (Text & Photo)
@@ -39,34 +40,71 @@ export const setupCommands = (client: TelegramClient) => {
     if (isPhoto) {
       try {
         const caption = message.text || "Please analyze this image.";
-        // Download media (GramJS downloads to buffer or path)
-        const buffer = await client.downloadMedia(message.media!, {});
+        console.log("[DEBUG] Photo detected. Starting download...");
 
-        // We need a way to pass the image to the AI.
-        // The original implementation passed a URL.
-        // GramJS gives us a Buffer. We might need to upload it somewhere or convert to base64 if the AI service supports it.
-        // Looking at `aiManager.ts` (implied), it might expect a URL.
-        // IF the previous bot logic relied on Telegram file links, Userbot doesn't generate public links easily without uploading.
-        // HOWEVER, for now let's assume we can't easily get a public URL for a userbot message without uploading it.
-        // We will pass a placeholder or try to handle base64 if possible.
-        // Since I can't easily change aiManager blindly, and the original code used `ctx.telegram.getFileLink`,
-        // which gives a URL.
-        // For a Userbot, we receive the file directly.
-        // I will log that photo handling might need adjustment in `aiManager` if it strictly requires http URL.
+        // Download media into a Buffer
+        const buffer = await client.downloadMedia(message.media!, {}) as Buffer;
 
-        // For now, let's assume we proceed with text logic or basic handling.
-        await message.reply({ message: "معلش، حالياً مش بقدر أحلل صور من حساب المستخدم مباشرة." });
-        return;
+        if (!buffer) {
+             console.log("[DEBUG] Failed to download photo: Buffer is empty.");
+             await message.reply({ message: "فشل تحميل الصورة. حاول تاني." });
+             return;
+        }
+        console.log(`[DEBUG] Photo downloaded. Buffer size: ${buffer.length} bytes.`);
 
-        /*
-        // Original logic for reference:
-        const userId = ctx.from.id;
+        // Upload to Cloudinary
+        console.log("[DEBUG] Uploading to Cloudinary...");
+        let imageUrl = "";
+        try {
+            imageUrl = await uploadImage(buffer);
+            console.log(`[DEBUG] Upload successful: ${imageUrl}`);
+        } catch (uploadError) {
+             console.error("[DEBUG] Cloudinary upload failed:", uploadError);
+             await message.reply({ message: "فشل رفع الصورة للسيرفر. تأكد من الإعدادات." });
+             return;
+        }
+
+        const sender = await message.getSender();
+        if (!sender || !('id' in sender)) return;
+        const userId = Number(sender.id);
+        console.log(`[DEBUG] Sender ID: ${userId}`);
+
+        // Log text part AND image URL
         await addToHistory(userId, "user", caption, imageUrl);
+
+        // Pass URL directly to AI
         const history = await getHistory(userId);
-        const response = await generateResponse(history, imageUrl);
-        */
+        const response = await generateResponse(
+            history,
+            imageUrl, // Pass the URL here
+            async (msg) => { await message.reply({ message: msg }); }
+        );
+        console.log("[DEBUG] AI Response received.");
+
+        await message.reply({ message: response });
+        await addToHistory(userId, "model", response);
+
+        // Get name safely (duplicated logic, could be helper but inline for now)
+        let name = "Unknown";
+        if ('firstName' in sender && sender.firstName) {
+            name = sender.firstName;
+        } else if ('title' in sender && sender.title) {
+            name = sender.title;
+        }
+        if ('username' in sender && sender.username) {
+            name += ` (@${sender.username})`;
+        }
+
+        await logConversation(
+            userId,
+            name,
+            `[Image: ${imageUrl}] ${caption}`,
+            response
+        );
+
       } catch (error) {
-        console.error("Error processing photo:", error);
+        console.error("[DEBUG] Error processing photo:", error);
+        await message.reply({ message: "حصل مشكلة وأنا بحلل الصورة. معلش جرب تاني." });
       }
       return;
     }

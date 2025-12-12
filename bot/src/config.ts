@@ -9,6 +9,9 @@ export interface Config {
   mistralApiKey?: string;
   openaiApiKey?: string;
   apiBaseUrl: string;
+  cloudinaryCloudName: string;
+  cloudinaryApiKey: string;
+  cloudinaryApiSecret: string;
   port: number;
 }
 
@@ -18,8 +21,11 @@ export const config: Config = {
   stringSession: process.env.STRING_SESSION || "",
   geminiApiKey: process.env.GEMINI_API_KEY,
   mistralApiKey: process.env.MISTRAL_API_KEY,
-  openaiApiKey: process.env.OPENAI_API_KEY,
+  openaiApiKey: process.env.OPENAI_API_KEY || "",
   apiBaseUrl: process.env.API_BASE_URL || "http://localhost:3000/api",
+  cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
+  cloudinaryApiKey: process.env.CLOUDINARY_API_KEY || "",
+  cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET || "",
   port: parseInt(process.env.PORT || "3000", 10),
 };
 
