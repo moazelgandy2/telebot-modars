@@ -7,19 +7,18 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Course {
-  id        String   @id @default(uuid())
+  id        String        @id @default(uuid())
   subject   String
   level     String
   teacher   String?
   online    OnlineOption?
   centers   Center[]
   book      Book?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 }
 
 model OnlineOption {
@@ -33,23 +32,23 @@ model OnlineOption {
 }
 
 model Center {
-  id        String   @id @default(uuid())
-  name      String
-  location  String
-  address   String?
-  mapsLink  String?
-  times     String[]
-  price     String
-  courseId  String
-  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  id       String   @id @default(uuid())
+  name     String
+  location String
+  address  String?
+  mapsLink String?
+  times    String[]
+  price    String
+  courseId String
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
 }
 
 model Book {
-  id        String   @id @default(uuid())
-  name      String
-  price     String
-  courseId  String   @unique
-  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  id       String @id @default(uuid())
+  name     String
+  price    String
+  courseId String @unique
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 }
 
 model Faq {
@@ -61,17 +60,17 @@ model Faq {
 }
 
 model Contact {
-  id            Int      @id @default(autoincrement())
-  phone         String
-  whatsapp      String
-  email         String
-  facebook      String
-  instagram     String
-  workingHours  String
-  responseTime  String?
+  id             Int      @id @default(autoincrement())
+  phone          String
+  whatsapp       String
+  email          String
+  facebook       String
+  instagram      String
+  workingHours   String
+  responseTime   String?
   paymentMethods Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model ChatSession {
@@ -84,7 +83,7 @@ model ChatSession {
 
 model ChatMessage {
   id        String      @id @default(uuid())
-  role      String      // "user" | "model"
+  role      String // "user" | "model"
   content   String
   sessionId String
   session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
