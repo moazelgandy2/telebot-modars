@@ -91,3 +91,12 @@ model ChatMessage {
   imageUrl  String?
   createdAt DateTime    @default(now())
 }
+
+model SystemInstruction {
+  id        String   @id @default(uuid())
+  role      String   @default("system")
+  content   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
