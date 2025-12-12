@@ -1,9 +1,6 @@
 {
   "name": "bot",
   "dependencies": {
-    "@google/genai": "^1.32.0",
-    "@mistralai/mistralai": "^1.10.0",
-    "@prisma/client": "^5.22.0",
     "@types/express": "^5.0.6",
     "cloudinary": "^2.8.0",
     "dotenv": "^17.2.3",
@@ -16,16 +13,14 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch main.ts",
-    "build": "npx prisma generate --schema=../web/prisma/schema.prisma && tsc && node -e \"const fs=require('fs'); fs.mkdirSync('public',{recursive:true}); fs.writeFileSync('public/favicon.ico', '')\"",
+    "build": "tsc && node -e \"const fs=require('fs'); fs.mkdirSync('public',{recursive:true}); fs.writeFileSync('public/favicon.ico', '')\"",
     "start": "node dist/main.js",
     "admin": "tsx admin-server.ts",
-    "generate": "npx prisma generate --schema=../web/prisma/schema.prisma",
     "generate-session": "tsx scripts/generate-session.ts"
   },
   "devDependencies": {
     "@types/node": "^24.10.2",
     "nodemon": "^3.1.11",
-    "prisma": "5.22.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"

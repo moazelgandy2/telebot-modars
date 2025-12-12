@@ -1,7 +1,6 @@
 import { TelegramClient, Api } from "telegram";
 import { NewMessage, NewMessageEvent } from "telegram/events/index.js";
-  generateResponse,
-} from "../services/openai.js";
+import { generateResponse } from "../services/openai.js";
 import { logConversation } from "../utils/conversationLogger.js";
 import { addToHistory, getHistory, clearHistory } from "../utils/memory.js";
 import { uploadImage } from "../utils/uploader.js";
