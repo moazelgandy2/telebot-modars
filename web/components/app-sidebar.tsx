@@ -18,8 +18,8 @@ export function AppSidebar() {
   return (
     <div className="flex h-screen w-64 flex-col border-l bg-card text-card-foreground"> {/* border-r to border-l for RTL aesthetics if needed, but in RTL layout border-e is safer. actually border-r in RTL is the left side? No, border-inline-end. Let's stick to standard behavior or just use border-border with RTL safe usually. border-r in RTL appears on the right? Wait. In RTL, 'right' is right. We want the border to separate sidebar from content. If sidebar is on right (default RTL?), border should be on left. In RTL mode, usually sidebar stays on start (right). So we need border-l (left). */}
       <div className="p-6 border-b">
-        <h1 className="text-2xl font-bold">تلي بوت 🤖</h1>
-        <p className="text-sm text-muted-foreground">لوحة التحكم</p>
+        <h1 className="text-lg font-bold">بوت رحلة تالته ثانوي</h1>
+        <p className="text-sm text-muted-foreground">لوحة التحكم 🤖 </p>
       </div>
       <nav className="flex-1 p-4 space-y-2">
         {navItems.map((item) => {

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Cairo } from "next/font/google";
 import "./globals.css";
 import AdminLayout from "@/components/admin-layout";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "sonner";
 
 const cairo = Cairo({
   subsets: ["arabic"],
@@ -10,8 +10,8 @@ const cairo = Cairo({
 });
 
 export const metadata: Metadata = {
-  title: "لوحة تحكم تلي بوت",
-  description: "نظام إدارة محتوى البوت",
+  title: "لوحة تحكم بوت",
+  description: "نظام إدارة بوت",
 };
 
 export default function RootLayout({
@@ -25,7 +25,7 @@ export default function RootLayout({
         className={`${cairo.className} antialiased`}
       >
         <AdminLayout>{children}</AdminLayout>
-        <Toaster />
+        <Toaster position="top-center"/>
       </body>
     </html>
   );

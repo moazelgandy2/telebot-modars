@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { Save, RefreshCw } from "lucide-react";
 import MDEditor from '@uiw/react-md-editor';
 
@@ -11,7 +11,6 @@ export default function SystemInstructionPage() {
   const [instruction, setInstruction] = useState("**مرحباً**");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
 
   const fetchInstruction = async () => {
     setLoading(true);
@@ -21,15 +20,12 @@ export default function SystemInstructionPage() {
       if (data.success && data.data) {
         setInstruction(data.data.content);
       }
-      toast({
-        title: "تم التحميل",
+      toast.success("تم التحميل", {
         description: "تم تحميل تعليمات النظام بنجاح"
       });
     } catch (error) {
       console.error("Error fetching instruction:", error);
-      toast({
-        variant: "destructive",
-        title: "خطأ",
+      toast.error("خطأ", {
         description: "فشل تحميل التعليمات"
       });
     } finally {
@@ -52,8 +48,7 @@ export default function SystemInstructionPage() {
       const data = await res.json();
 
       if (data.success) {
-        toast({
-          title: "تم الحفظ",
+        toast.success("تم الحفظ", {
           description: "تم تحديث تعليمات النظام بنجاح"
         });
       } else {
@@ -61,9 +56,7 @@ export default function SystemInstructionPage() {
       }
     } catch (error) {
        console.error("Error saving instruction:", error);
-       toast({
-        variant: "destructive",
-        title: "خطأ",
+       toast.error("خطأ", {
         description: "فشل حفظ التعليمات"
       });
     } finally {

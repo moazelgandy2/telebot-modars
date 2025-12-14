@@ -4,10 +4,8 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
-
-import { Lock } from "lucide-react";
-import { useToast } from '@/components/ui/use-toast';
+import {  Save, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState({
@@ -17,7 +15,6 @@ export default function SettingsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
 
   useEffect(() => {
     fetch('/api/settings')
@@ -49,18 +46,15 @@ export default function SettingsPage() {
       const data = await res.json();
 
       if (data.success) {
-        toast({
-          title: "تم الحفظ",
-          description: "تم تحديث إعدادات البوت والتعليمات بنجاح."
+        toast.success("تم الحفظ", {
+          description: "تم تحديث الإعدادات بنجاح."
         });
       } else {
          throw new Error(data.error || "Failed to save");
       }
     } catch (error) {
        console.error("Error saving settings:", error);
-       toast({
-        variant: "destructive",
-        title: "خطأ",
+       toast.error("خطأ", {
         description: "فشل حفظ الإعدادات"
       });
     } finally {
@@ -73,89 +67,101 @@ export default function SettingsPage() {
       try {
           const res = await fetch('/api/bot/reload', { method: 'POST' });
           if (res.ok) {
-              toast({ title: "تم التحديث", description: "تم إعادة تحميل البوت بنجاح." });
+              toast.success("تم تحديث البوت", { description: "تم إعادة تشغيل النظام بالإعدادات الجديدة." });
           } else {
               throw new Error("Reload failed");
           }
       } catch (e) {
-          toast({ variant: "destructive", title: "خطأ", description: "فشل تحديث البوت. تأكد أنه يعمل." });
+          toast.error("خطأ", { description: "فشل في إعادة تشغيل البوت." });
       } finally {
           setSaving(false);
       }
   };
 
-  if (loading) return <div className="p-8 text-center text-muted-foreground">جاري التحميل...</div>;
+  if (loading) return <div className="p-8 text-center text-xs text-muted-foreground animate-pulse">جاري تحميل الإعدادات...</div>;
 
   return (
+    <div className="container max-w-4xl py-6 space-y-6 animate-in fade-in duration-500">
+
+      {/* Minimal Header */}
       <div className="flex items-center justify-between">
-         <div className="space-y-1">
-             <h1 className="text-3xl font-bold tracking-tight">إعدادات البوت</h1>
-             <p className="text-muted-foreground">
-                 تكوين بيانات الاتصال بتيليجرام (API Credentials).
-             </p>
+         <div>
+             <h1 className="text-xl font-semibold tracking-tight">إعدادات البوت</h1>
+             <p className="text-sm text-muted-foreground">إدارة بيانات الاتصال وحالة النظام.</p>
          </div>
-         <Button variant="outline" onClick={handleReload} disabled={saving}>
-             تحديث البوت (Reload)
+         <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleReload}
+            disabled={saving}
+            className="text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 gap-1.5"
+         >
+             <RefreshCw className={`w-3.5 h-3.5 ${saving ? 'animate-spin' : ''}`} />
+             تحديث البوت
          </Button>
+      </div>
 
+      {/* Compact Card */}
+      <Card className="border-border/40 shadow-none bg-background/50 backdrop-blur-sm">
+         <CardContent className="p-6">
+            <div className="grid gap-5">
 
-      <Card>
-         <CardHeader>
-           <CardTitle>بيانات الاعتماد (Credentials)</CardTitle>
-           <CardDescription>هذه البيانات حساسة، لا تشاركها مع أحد.</CardDescription>
-         </CardHeader>
-         <CardContent className="space-y-4">
-            {/* Inputs... */}
-            <div className="space-y-2">
-              <label htmlFor="apiId" className="text-sm font-medium">API ID</label>
-              <Input
-                id="apiId"
-                name="apiId"
-                value={settings.apiId}
-                onChange={handleChange}
-                placeholder="Ex: 123456"
-                className="font-mono direction-ltr"
-                style={{ direction: 'ltr' }}
-              />
+                {/* Credentials Group */}
+                <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground ml-1">معرف التطبيق (App ID)</label>
+                        <Input
+                            name="apiId"
+                            value={settings.apiId}
+                            onChange={handleChange}
+                            placeholder="123456"
+                            className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all"
+                            style={{ direction: 'ltr' }}
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground ml-1">رمز الوصول (App Hash)</label>
+                        <Input
+                            name="apiHash"
+                            value={settings.apiHash}
+                            onChange={handleChange}
+                            placeholder="Hash String"
+                            type="password"
+                            className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all"
+                            style={{ direction: 'ltr' }}
+                        />
+                    </div>
+                </div>
+
+                <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground ml-1">جلسة المصادقة (String Session)</label>
+                    <Input
+                        name="stringSession"
+                        value={settings.stringSession}
+                        onChange={handleChange}
+                        placeholder="1BVts..."
+                        type="password"
+                        className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all"
+                        style={{ direction: 'ltr' }}
+                    />
+                </div>
+
+                {/* Actions Footer within Card */}
+                <div className="pt-2 flex justify-end">
+                    <Button
+                        onClick={handleSave}
+                        disabled={saving}
+                        size="sm"
+                        className="gap-2 min-w-[100px] h-9"
+                    >
+                       {saving ? <span className="animate-spin text-xs">⏳</span> : <Save className="w-3.5 h-3.5" />}
+                       حفظ التغييرات
+                    </Button>
+                </div>
             </div>
-
-            <div className="space-y-2">
-              <label htmlFor="apiHash" className="text-sm font-medium">API Hash</label>
-              <Input
-                id="apiHash"
-                name="apiHash"
-                value={settings.apiHash}
-                onChange={handleChange}
-                placeholder="Ex: a1b2c3d4e5..."
-                type="password"
-                className="font-mono direction-ltr"
-                style={{ direction: 'ltr' }}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="stringSession" className="text-sm font-medium">String Session</label>
-              <Input
-                id="stringSession"
-                name="stringSession"
-                value={settings.stringSession}
-                onChange={handleChange}
-                placeholder="Session String..."
-                type="password"
-                className="font-mono direction-ltr"
-                style={{ direction: 'ltr' }}
-              />
-            </div>
-
-            <Button onClick={handleSave} disabled={saving} className="w-full gap-2 mt-4">
-               <Lock className="h-4 w-4" />
-               {saving ? "جاري الحفظ..." : "حفظ وتحديث"}
-            </Button>
          </CardContent>
       </Card>
-      <div className="text-xs text-muted-foreground text-center">
-         ملاحظة: البوت يقوم بالتحديث تلقائياً عند الحفظ. يمكنك استخدام زر التحديث اليدوي عند الحاجة.
-      </div>
+
     </div>
   );
 }
