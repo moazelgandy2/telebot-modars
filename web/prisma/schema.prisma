@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,73 +7,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Course {
-  id        String        @id @default(uuid())
-  subject   String
-  level     String
-  teacher   String?
-  online    OnlineOption?
-  centers   Center[]
-  book      Book?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-}
-
-model OnlineOption {
-  id        String   @id @default(uuid())
-  available Boolean  @default(false)
-  platform  String?
-  times     String[]
-  price     String
-  courseId  String   @unique
-  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-}
-
-model Center {
-  id       String   @id @default(uuid())
-  name     String
-  location String
-  address  String?
-  mapsLink String?
-  times    String[]
-  price    String
-  courseId String
-  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-}
-
-model Book {
-  id       String @id @default(uuid())
-  name     String
-  price    String
-  courseId String @unique
-  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
-}
-
-model Faq {
-  id        Int      @id @default(autoincrement())
-  question  String
-  answer    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Contact {
-  id             Int      @id @default(autoincrement())
-  phone          String
-  whatsapp       String
-  email          String
-  facebook       String
-  instagram      String
-  workingHours   String
-  responseTime   String?
-  paymentMethods Json?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+model BotSetting {
+  key   String @id
+  value String
 }
 
 model ChatSession {
   id        String        @id @default(uuid())
   userId    String        @unique
+  username  String?
   messages  ChatMessage[]
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
@@ -88,8 +27,16 @@ model ChatMessage {
   content   String
   sessionId String
   session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  imageUrl  String?
+  attachments Attachment[]
   createdAt DateTime    @default(now())
+}
+
+model Attachment {
+  id        String      @id @default(uuid())
+  url       String
+  type      String      // "image", "video", "document", etc.
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }
 
 model SystemInstruction {

@@ -3,19 +3,27 @@ import { NewMessage, NewMessageEvent } from "telegram/events/index.js";
 import { generateResponse } from "../services/openai.js";
 import { logConversation } from "../utils/conversationLogger.js";
 import { addToHistory, getHistory, clearHistory } from "../utils/memory.js";
-import { uploadImage } from "../utils/uploader.js";
+import { uploadMedia } from "../utils/uploader.js";
 
-const getSenderName = (sender: any): string => {
+const getSenderInfo = (sender: any) => {
    let name = "Unknown";
-   if ('firstName' in sender && sender.firstName) {
+   let username = undefined;
+
+   if (sender.username) {
+       username = `@${sender.username}`;
+   }
+
+   if (sender.firstName) {
        name = sender.firstName;
-   } else if ('title' in sender && sender.title) {
+   } else if (sender.title) {
        name = sender.title;
    }
-   if ('username' in sender && sender.username) {
-       name += ` (@${sender.username})`;
+
+   if (username) {
+       name += ` (${username})`;
    }
-   return name;
+
+   return { name, username: sender.username || undefined };
 };
 
 export const setupCommands = (client: TelegramClient) => {
@@ -47,57 +55,66 @@ export const setupCommands = (client: TelegramClient) => {
         return;
     }
 
-    // 2. Handle Photo
-    if (isPhoto) {
+    // 2. Handle Media (Photo, Video, Document)
+    if (message.media) {
       try {
         const caption = message.text || "";
 
         // Download media into a Buffer
-        const buffer = await client.downloadMedia(message.media!, {}) as Buffer;
+        const buffer = await client.downloadMedia(message.media, {}) as Buffer;
 
         if (!buffer) {
-             await message.reply({ message: "فشل تحميل الصورة. حاول تاني." });
+             await message.reply({ message: "فشل تحميل الملف. حاول تاني." });
              return;
         }
 
         // Upload to Cloudinary
-        let imageUrl = "";
+        let mediaUrl = "";
         try {
-            imageUrl = await uploadImage(buffer);
+            mediaUrl = await uploadMedia(buffer);
         } catch (uploadError) {
              console.error("Cloudinary upload failed:", uploadError);
-             await message.reply({ message: "فشل رفع الصورة للسيرفر. تأكد من الإعدادات." });
+             await message.reply({ message: "فشل رفع الملف للسيرفر." });
              return;
         }
 
         const sender = await message.getSender();
         if (!sender || !('id' in sender)) return;
         const userId = Number(sender.id);
+        const { name, username } = getSenderInfo(sender);
 
-        // Log text part AND image URL
-        await addToHistory(userId, "user", caption, imageUrl);
+        // Construct Attachments Array
+        // Infer type simple check
+        let mimeType = 'document';
+        if (mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i)) mimeType = 'image/jpeg';
+        else if (mediaUrl.match(/\.(mp4|webm|mov)$/i)) mimeType = 'video/mp4';
+
+        const attachments = [{ url: mediaUrl, type: mimeType }];
+
+        // Log text part AND media URL
+        await addToHistory(userId, "user", caption, username, attachments);
 
         // Pass URL directly to AI
         const history = await getHistory(userId);
         const response = await generateResponse(
             history,
-            imageUrl, // Pass the URL here
+            attachments,
             async (msg) => { await message.reply({ message: msg }); }
         );
 
         await message.reply({ message: response });
-        await addToHistory(userId, "model", response);
+        await addToHistory(userId, "model", response, username);
 
         await logConversation(
             userId,
-            getSenderName(sender),
-            `[Image: ${imageUrl}] ${caption}`,
+            name,
+            `[Attachment: ${mediaUrl}] ${caption}`,
             response
         );
 
       } catch (error) {
-        console.error("Error processing photo:", error);
-        await message.reply({ message: "حصل مشكلة وأنا بحلل الصورة. معلش جرب تاني." });
+        console.error("Error processing media:", error);
+        await message.reply({ message: "حصل مشكلة وأنا بحلل الملف. معلش جرب تاني." });
       }
       return;
     }
@@ -111,13 +128,14 @@ export const setupCommands = (client: TelegramClient) => {
             // memory.ts expects number, ensuring BigInt id fits or use string if memory.ts supported it.
             // For now assuming it fits in number (safe up to 9 quadrillion).
             const userId = Number(sender.id);
+            const { name, username } = getSenderInfo(sender);
 
             const me = await client.getMe();
             if (sender.id.toString() === me.id.toString()) return;
 
             // Show typing... (GramJS doesn't have easy sendChatAction like Telegraf in same way, skipping for now)
 
-            await addToHistory(userId, "user", text);
+            await addToHistory(userId, "user", text, username);
             const history = await getHistory(userId);
 
             const response = await generateResponse(
@@ -129,11 +147,11 @@ export const setupCommands = (client: TelegramClient) => {
             );
 
             await message.reply({ message: response });
-            await addToHistory(userId, "model", response);
+            await addToHistory(userId, "model", response, username);
 
              await logConversation(
                 userId,
-                getSenderName(sender),
+                name,
                 text,
                 response
             );

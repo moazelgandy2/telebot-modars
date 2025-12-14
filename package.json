@@ -8,6 +8,7 @@
     "web"
   ],
   "scripts": {
+    "dev": "npx concurrently -k \"pnpm --filter web dev\" \"npx wait-on tcp:3000 && pnpm --filter bot dev\"",
     "dev:bot": "pnpm --filter bot dev",
     "dev:web": "pnpm --filter web dev",
     "build": "pnpm -r build"

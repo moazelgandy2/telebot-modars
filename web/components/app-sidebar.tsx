@@ -2,14 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BookOpen, HelpCircle, Phone, Home, LogOut } from 'lucide-react';
+import { Home, MessageSquare, Settings, ClipboardList } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/', label: 'الرئيسية', icon: Home }, // Overview -> الرئيسية
-  { href: '/courses', label: 'الكورسات', icon: BookOpen }, // Courses -> الكورسات
-  { href: '/faqs', label: 'الأسئلة الشائعة', icon: HelpCircle }, // FAQs -> الأسئلة الشائعة
-  { href: '/contact', label: 'بيانات التواصل', icon: Phone }, // Contact -> بيانات التواصل
+  { href: '/', label: 'الرئيسية', icon: Home },
+  { href: '/chats', label: 'المحادثات', icon: MessageSquare },
+  { href: '/system-instruction', label: 'توجيهات النظام', icon: ClipboardList },
+  { href: '/settings', label: 'الإعدادات', icon: Settings },
 ];
 
 export function AppSidebar() {

@@ -1,30 +1,29 @@
 export const dynamic = "force-dynamic";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCourses } from "./actions/courses";
-import { getFaqs } from "./actions/faqs";
-import { BookOpen, HelpCircle } from "lucide-react";
+import { MessageSquare, Settings } from "lucide-react";
+import { prisma } from "@/lib/db";
 
 export default async function Dashboard() {
-  const courses = await getCourses();
-  const faqs = await getFaqs();
+  const sessionsCount = await prisma.chatSession.count();
+  const instructionsCount = await prisma.systemInstruction.count();
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold tracking-tight">نظرة عامة</h1>{" "}
-      {/* Dashboard -> نظرة عامة (Overview) */}
+      <h1 className="text-3xl font-bold tracking-tight">نظرة عامة</h1>
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              إجمالي الكورسات
+              المحادثات النشطة
             </CardTitle>
-            <BookOpen className="h-4 w-4 text-muted-foreground" />
+            <MessageSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{courses.length}</div>
+            <div className="text-2xl font-bold">{sessionsCount}</div>
             <p className="text-xs text-muted-foreground">
-              عدد الكورسات الموجودة حالياً
+              عدد المستخدمين الذين تواصلوا مع البوت
             </p>
           </CardContent>
         </Card>
@@ -32,13 +31,13 @@ export default async function Dashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              الأسئلة الشائعة
+              توجيهات النظام
             </CardTitle>
-            <HelpCircle className="h-4 w-4 text-muted-foreground" />
+            <Settings className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{faqs.length}</div>
-            <p className="text-xs text-muted-foreground">سؤال وجواب للبوت</p>
+            <div className="text-2xl font-bold">{instructionsCount}</div>
+            <p className="text-xs text-muted-foreground">نسخ التعليمات المحفوظة</p>
           </CardContent>
         </Card>
       </div>

@@ -8,14 +8,17 @@ cloudinary.config({
 });
 
 /**
- * Uploads a Buffer to Cloudinary and returns the secure URL.
- * @param buffer Image buffer
+ * Uploads a Buffer (Image/Video/File) to Cloudinary and returns the secure URL.
+ * @param buffer File buffer
  * @returns Promise<string> Secure URL
  */
-export const uploadImage = async (buffer: Buffer): Promise<string> => {
+export const uploadMedia = async (buffer: Buffer): Promise<string> => {
     return new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
-            { folder: "telebot_user_uploads" },
+            {
+                folder: "telebot_user_uploads",
+                resource_type: "auto" // Auto-detect image/video/raw
+            },
             (error, result) => {
                 if (error) return reject(error);
                 if (!result) return reject(new Error("Cloudinary upload failed (no result)"));

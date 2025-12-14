@@ -82,3 +82,46 @@ export async function GET() {
     );
   }
 }
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const { content } = body;
+
+    if (!content || typeof content !== 'string') {
+        return NextResponse.json(
+            { success: false, error: 'Content is required' },
+            { status: 400 }
+        );
+    }
+
+    // Use transaction to deactivate old and insert new to ensure data integrity
+    const newInstruction = await prisma.$transaction(async (tx) => {
+        // Deactivate all current active instructions
+        await tx.systemInstruction.updateMany({
+            where: { isActive: true },
+            data: { isActive: false }
+        });
+
+        // Create new active instruction
+        return await tx.systemInstruction.create({
+            data: {
+                content,
+                role: 'system',
+                isActive: true
+            }
+        });
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: newInstruction
+    });
+  } catch (error) {
+    console.error('Error saving system instruction:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to save system instruction' },
+      { status: 500 }
+    );
+  }
+}

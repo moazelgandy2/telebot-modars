@@ -17,16 +17,36 @@ export const getHistory = async (userId: number): Promise<ChatMessage[]> => {
 
     const messages = (await res.json()) as any[];
     return messages.map((msg: any) => {
-      const parts: any[] = [{ text: msg.content }];
-      if (msg.imageUrl) {
-        // According to OpenAI spec, image_url block is separate or part of content array
-        // We will structure it as the prompt generator expects
-        // But for getHistory return type, let's keep it simple
-        // Actually, let's just return the raw text + imageUrl handling in openai.ts
+      const parts: any[] = [];
+
+      // 1. Text Content
+      if (msg.content) {
+          parts.push({ text: msg.content });
       }
+
+      // 2. Attachments (New Schema)
+      if (msg.attachments && Array.isArray(msg.attachments)) {
+          msg.attachments.forEach((att: any) => {
+              if (att.type?.startsWith('image/') || att.url.match(/\.(jpeg|jpg|gif|png|webp)$/i)) {
+                  parts.push({ image_url: { url: att.url } });
+              } else {
+                  // Non-image attachments (Video/PDF) -> Append as text context
+                  parts.push({ text: `\n[Attachment: ${att.type || 'file'} - ${att.url}]` });
+              }
+          });
+      }
+
+      // 3. Legacy ImageUrl (Old Schema)
+      if (msg.imageUrl) {
+          parts.push({ image_url: { url: msg.imageUrl } });
+      }
+
+      // Fallback if empty (shouldn't happen often)
+      if (parts.length === 0) parts.push({ text: "" });
+
       return {
         role: msg.role === "user" ? "user" : "model",
-        parts: [{ text: msg.content, imageUrl: msg.imageUrl }], // Pass raw imageUrl
+        parts: parts,
       };
     });
   } catch (error) {
@@ -39,7 +59,8 @@ export const addToHistory = async (
   userId: number,
   role: "user" | "model",
   text: string,
-  imageUrl?: string
+  username?: string,
+  attachments?: { url: string; type: string }[]
 ) => {
   try {
     await fetch(`${config.apiBaseUrl}/chat/history`, {
@@ -49,7 +70,8 @@ export const addToHistory = async (
         userId: userId.toString(),
         role,
         content: text,
-        imageUrl,
+        username,
+        attachments,
       }),
     });
   } catch (error) {
