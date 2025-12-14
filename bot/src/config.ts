@@ -13,6 +13,8 @@ export interface Config {
   cloudinaryApiKey: string;
   cloudinaryApiSecret: string;
   port: number;
+  reloadPort: number;
+  azureOpenAIEndpoint: string;
 }
 
 export const config: Config = {
@@ -27,6 +29,8 @@ export const config: Config = {
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY || "",
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET || "",
   port: parseInt(process.env.PORT || "3000", 10),
+  reloadPort: parseInt(process.env.RELOAD_PORT || "4000", 10),
+  azureOpenAIEndpoint: process.env.AZURE_OPENAI_ENDPOINT || "https://chatgptprojapi.services.ai.azure.com/",
 };
 
 export default config;

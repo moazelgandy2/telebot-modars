@@ -51,7 +51,7 @@ export default function SettingsPage() {
       if (data.success) {
         toast({
           title: "تم الحفظ",
-          description: "تم تحديث إعدادات البوت بنجاح. يرجى إعادة تشغيل البوت لتفعيل التغييرات."
+          description: "تم تحديث إعدادات البوت والتعليمات بنجاح."
         });
       } else {
          throw new Error(data.error || "Failed to save");
@@ -68,16 +68,36 @@ export default function SettingsPage() {
     }
   };
 
+  const handleReload = async () => {
+      setSaving(true);
+      try {
+          const res = await fetch('/api/bot/reload', { method: 'POST' });
+          if (res.ok) {
+              toast({ title: "تم التحديث", description: "تم إعادة تحميل البوت بنجاح." });
+          } else {
+              throw new Error("Reload failed");
+          }
+      } catch (e) {
+          toast({ variant: "destructive", title: "خطأ", description: "فشل تحديث البوت. تأكد أنه يعمل." });
+      } finally {
+          setSaving(false);
+      }
+  };
+
   if (loading) return <div className="p-8 text-center text-muted-foreground">جاري التحميل...</div>;
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
-      <div className="space-y-1">
-         <h1 className="text-3xl font-bold tracking-tight">إعدادات البوت</h1>
-         <p className="text-muted-foreground">
-             تكوين بيانات الاتصال بتيليجرام (API Credentials).
-         </p>
-      </div>
+      <div className="flex items-center justify-between">
+         <div className="space-y-1">
+             <h1 className="text-3xl font-bold tracking-tight">إعدادات البوت</h1>
+             <p className="text-muted-foreground">
+                 تكوين بيانات الاتصال بتيليجرام (API Credentials).
+             </p>
+         </div>
+         <Button variant="outline" onClick={handleReload} disabled={saving}>
+             تحديث البوت (Reload)
+         </Button>
+
 
       <Card>
          <CardHeader>
@@ -85,6 +105,7 @@ export default function SettingsPage() {
            <CardDescription>هذه البيانات حساسة، لا تشاركها مع أحد.</CardDescription>
          </CardHeader>
          <CardContent className="space-y-4">
+            {/* Inputs... */}
             <div className="space-y-2">
               <label htmlFor="apiId" className="text-sm font-medium">API ID</label>
               <Input
@@ -132,9 +153,8 @@ export default function SettingsPage() {
             </Button>
          </CardContent>
       </Card>
-
       <div className="text-xs text-muted-foreground text-center">
-         ملاحظة: تحتاج لإعادة تشغيل البوت ليقرأ البيانات الجديدة من قاعدة البيانات.
+         ملاحظة: البوت يقوم بالتحديث تلقائياً عند الحفظ. يمكنك استخدام زر التحديث اليدوي عند الحاجة.
       </div>
     </div>
   );

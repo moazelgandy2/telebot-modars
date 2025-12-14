@@ -4,6 +4,7 @@ import { generateResponse } from "../services/openai.js";
 import { logConversation } from "../utils/conversationLogger.js";
 import { addToHistory, getHistory, clearHistory } from "../utils/memory.js";
 import { uploadMedia } from "../utils/uploader.js";
+import config from "../config.js";
 
 const getSenderInfo = (sender: any) => {
    let name = "Unknown";
@@ -52,6 +53,18 @@ export const setupCommands = (client: TelegramClient) => {
 
     if (text === "/model") {
         await message.reply({ message: "حالياً أنا شغال بنظام OpenAI المطور (ChatGPT) بس 🤖" });
+        return;
+    }
+
+    if (text === "/reload") {
+        await message.reply({ message: "جاري تحديث النظام والإعدادات... ⏳" });
+        try {
+            await fetch(`http://localhost:${config.reloadPort}/reload`, { method: "POST" });
+            await message.reply({ message: "تم التحديث بنجاح! 🚀" });
+        } catch (e) {
+            console.error("Reload failed:", e);
+            await message.reply({ message: "فشل التحديث. تأكد ان السيرفر شغال." });
+        }
         return;
     }
 

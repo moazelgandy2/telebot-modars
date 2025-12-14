@@ -29,8 +29,9 @@ export async function POST(req: Request) {
 
     await prisma.$transaction(updates);
 
-    // Notify bot to reload (Fire and forget)
-    fetch("http://localhost:4000/reload", { method: "POST" }).catch(e => console.error("Failed to notify bot reload:", e));
+
+    const BOT_URL = process.env.BOT_URL || "http://localhost:4000";
+    fetch(`${BOT_URL}/reload`, { method: "POST" }).catch(e => console.error("Failed to notify bot reload:", e));
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -2,10 +2,10 @@ import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
 import config from "./config.js";
 import { setupCommands } from "./commands/index.js";
+import { clearInstructionCache } from "./services/openai.js";
 import express from "express";
 
 const app = express();
-const RELOAD_PORT = 4000;
 
 const fetchSettings = async () => {
     try {
@@ -76,10 +76,11 @@ export const startBot = async () => {
 
 app.post("/reload", async (req, res) => {
     console.log("Received reload request. Restarting bot with new settings...");
+    clearInstructionCache();
     await startBot();
-    res.json({ success: true, message: "Bot restarted" });
+    res.json({ success: true, message: "Bot restarted and cache cleared" });
 });
 
-app.listen(RELOAD_PORT, () => {
-    console.log(`Reload server listening on port ${RELOAD_PORT}`);
+app.listen(config.reloadPort, () => {
+    console.log(`Reload server listening on port ${config.reloadPort}`);
 });

@@ -75,10 +75,16 @@ const getSystemInstruction = async (): Promise<string> => {
   return FALLBACK_INSTRUCTION;
 };
 
+export const clearInstructionCache = () => {
+    cachedInstruction = null;
+    lastFetchTime = 0;
+    console.log("System instruction cache cleared.");
+};
 
 
 
-const endpoint = "https://chatgptprojapi.services.ai.azure.com/";
+
+const endpoint = config.azureOpenAIEndpoint;
 const apiVersion = "2024-08-01-preview";
 const deployment = "gpt-5-nano";
 

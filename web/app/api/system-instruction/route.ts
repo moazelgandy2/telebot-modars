@@ -113,6 +113,15 @@ export async function POST(req: Request) {
         });
     });
 
+    // Validated: Fire and forget reload (or await but ignore error)
+    const BOT_URL = process.env.BOT_URL || "http://localhost:4000";
+    try {
+        await fetch(`${BOT_URL}/reload`, { method: "POST" });
+        console.log("Bot reload triggered successfully.");
+    } catch (reloadError) {
+        console.warn("Failed to trigger bot reload (Bot might be offline):", reloadError);
+    }
+
     return NextResponse.json({
       success: true,
       data: newInstruction
