@@ -22,19 +22,19 @@ model ChatSession {
 }
 
 model ChatMessage {
-  id        String      @id @default(uuid())
-  role      String // "user" | "model"
-  content   String
-  sessionId String
-  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id          String       @id @default(uuid())
+  role        String // "user" | "model"
+  content     String
+  sessionId   String
+  session     ChatSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   attachments Attachment[]
-  createdAt DateTime    @default(now())
+  createdAt   DateTime     @default(now())
 }
 
 model Attachment {
   id        String      @id @default(uuid())
   url       String
-  type      String      // "image", "video", "document", etc.
+  type      String // "image", "video", "document", etc.
   messageId String
   message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }
@@ -44,6 +44,14 @@ model SystemInstruction {
   role      String   @default("system")
   content   String
   isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FAQ {
+  id        String   @id @default(uuid())
+  question  String
+  answer    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

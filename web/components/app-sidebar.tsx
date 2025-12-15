@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, MessageSquare, Settings, ClipboardList } from 'lucide-react';
+
+import { Home, MessageSquare, Settings, ClipboardList, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/', label: 'الرئيسية', icon: Home },
   { href: '/chats', label: 'المحادثات', icon: MessageSquare },
+  { href: '/faqs', label: 'الأسئلة الشائعة', icon: HelpCircle },
   { href: '/system-instruction', label: 'توجيهات النظام', icon: ClipboardList },
   { href: '/settings', label: 'الإعدادات', icon: Settings },
 ];

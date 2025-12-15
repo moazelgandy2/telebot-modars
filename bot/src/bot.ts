@@ -30,9 +30,13 @@ export const startBot = async () => {
   console.log("Fetching configuration from DB...");
   const settings = await fetchSettings();
 
-  const apiId = settings?.apiId || config.apiId;
-  const apiHash = settings?.apiHash || config.apiHash;
-  const session = settings?.stringSession || config.stringSession;
+
+  const apiId = settings ? settings.apiId : config.apiId;
+  const apiHash = settings ? settings.apiHash : config.apiHash;
+
+  // Strict priority: If settings were fetched, use them (even if empty string)
+  // Only fallback to config if settings fetch failed (null)
+  const session = settings ? settings.stringSession : config.stringSession;
 
   if (!apiId || !apiHash) {
       console.error("Error: API_ID and API_HASH must be provided (in DB or .env)!");

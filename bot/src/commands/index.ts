@@ -1,10 +1,13 @@
 import { TelegramClient, Api } from "telegram";
 import { NewMessage, NewMessageEvent } from "telegram/events/index.js";
+
+
 import { generateResponse } from "../services/openai.js";
 import { logConversation } from "../utils/conversationLogger.js";
 import { addToHistory, getHistory, clearHistory } from "../utils/memory.js";
 import { uploadMedia } from "../utils/uploader.js";
 import config from "../config.js";
+import { findMatchingFAQ } from "../services/faq.js";
 
 const getSenderInfo = (sender: any) => {
    let name = "Unknown";
@@ -148,7 +151,10 @@ export const setupCommands = (client: TelegramClient) => {
 
             // Show typing... (GramJS doesn't have easy sendChatAction like Telegraf in same way, skipping for now)
 
+
+
             await addToHistory(userId, "user", text, username);
+
             const history = await getHistory(userId);
 
             const response = await generateResponse(

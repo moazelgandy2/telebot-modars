@@ -71,7 +71,7 @@ const getSystemInstruction = async (): Promise<string> => {
 
   if (cachedInstruction) return cachedInstruction;
 
-  // Fallback to default instruction if everything fails
+
   return FALLBACK_INSTRUCTION;
 };
 
@@ -86,14 +86,17 @@ export const clearInstructionCache = () => {
 
 const endpoint = config.azureOpenAIEndpoint;
 const apiVersion = "2024-08-01-preview";
-const deployment = "gpt-5-nano";
 
-const client = new AzureOpenAI({
+export const deployment = "gpt-5-nano";
+
+
+export const client = new AzureOpenAI({
   endpoint: endpoint,
   apiKey: config.openaiApiKey,
   apiVersion: apiVersion,
   deployment: deployment,
 });
+
 
 export const generateResponse = async (
   history: ChatMessage[],
@@ -106,66 +109,67 @@ export const generateResponse = async (
 
   const systemInstruction = await getSystemInstruction();
 
+
+  const { getFAQs } = await import("./faq.js");
+  const faqs = await getFAQs();
+
+  let knowledgeBase = "\n\n## 📚 KNOWLEDGE BASE (FAQs)\n";
+  if (faqs.length === 0) {
+      knowledgeBase += "No FAQs available currently.";
+  } else {
+
+
+    knowledgeBase += faqs.map((f, i) => `${i+1}. ${f.question}?\n${f.answer}`).join("\n");
+  }
+
+
+  const enhancedSystemInstruction = systemInstruction + knowledgeBase;
+  console.log(`[DEBUG] System Instruction Length: ${enhancedSystemInstruction.length}`);
+  console.log(`[DEBUG] System Instruction Preview: ${enhancedSystemInstruction.substring(0, 200)}...`);
+
+
+  const recentHistory = history.slice(-20);
+
   const messages: any[] = [
-    { role: "system", content: systemInstruction },
-    ...history.map((msg) => {
-        // Handle history items (assuming we might start storing attachments in history in the future in a compatible way)
-        const parts = msg.parts || []; // Safely handle parts
+    { role: "system", content: enhancedSystemInstruction },
+    ...recentHistory.map((msg) => {
+        const parts = msg.parts || [];
         const content = parts.map((part: any) => {
           if (part.image_url) {
               return { type: "image_url", image_url: { url: part.image_url.url } };
           }
-          // Check specifically for string (even empty) to avoid dropping empty text blocks which are valid anchors
           if (typeof part.text === 'string') {
               return { type: "text", text: part.text };
           }
           return null;
         }).filter(Boolean);
 
-        // Fallback: If content is empty (e.g. some malformed message), provide placeholder to prevent API error
         if (content.length === 0) {
-             return null; // We will filter these out
+             return null;
         }
 
         return {
             role: msg.role === "model" ? "assistant" : "user",
             content: content,
         };
-    }).filter(Boolean) as any[], // Filter out null messages
+    }).filter(Boolean) as any[],
   ];
 
   if (attachments && attachments.length > 0) {
-    // Check if we have a user message pending (the last one usually, but here we are constructing the NEW message)
-    // Actually, generateResponse is called *after* addToHistory in the current flow?
-    // No, looking at commands/index.ts:
-    // await addToHistory(...)
-    // const history = await getHistory(...)
-    // const response = await generateResponse(history, ...)
-
-    // So 'history' already contains the latest user message.
-    // We need to attach the images to that last message in the 'messages' array we just built.
-
     if (messages.length > 0) {
       const lastMsg = messages[messages.length - 1];
       if (lastMsg.role === "user") {
           let contentArray: any[] = [];
-
-          // If existing content is string, convert to array
           if (typeof lastMsg.content === "string") {
               contentArray.push({ type: "text", text: lastMsg.content });
           } else if (Array.isArray(lastMsg.content)) {
               contentArray = [...lastMsg.content];
           }
 
-          // Append new attachments
           attachments.forEach(att => {
               if (att.type.startsWith('image/')) {
-                   // Ensure we don't duplicate if history already had it (unlikely with this flow but safe)
-                   // Actually history logic in memory.ts is just returning {text, imageUrl} single field.
-                   // So we DO need to inject the extra attachments here if they aren't in the simplified history yet.
                    contentArray.push({ type: "image_url", image_url: { url: att.url } });
               } else {
-                  // For non-images, append to text
                   const textPart = contentArray.find(c => c.type === "text");
                   if (textPart) {
                       textPart.text += `\n[Attachment: ${att.type} - ${att.url}]`;
@@ -174,7 +178,6 @@ export const generateResponse = async (
                   }
               }
           });
-
           lastMsg.content = contentArray;
       }
     }
@@ -183,33 +186,34 @@ export const generateResponse = async (
   let retries = 0;
   while (retries >= 0) {
     try {
+      console.log(`[DEBUG] Sending request to OpenAI with ${messages.length} messages.`);
       const response = await client.chat.completions.create({
         messages: messages as any,
         model: deployment,
-        // tools: tools, // No tools needed
-        reasoning_effort: "none",
-        // tool_choice: "auto",
-        max_completion_tokens: 800,
       });
 
       const choice = response.choices[0];
+      console.log("[DEBUG] OpenAI Response Choice:", JSON.stringify(choice, null, 2));
+
+      if (choice.finish_reason === 'length') {
+          console.warn("[WARN] Response truncated due to length.");
+      }
+
       const message = choice.message;
-
-      // Removed tool handling block
-
       const content = message.content;
+
       if (!content?.trim()) {
-        throw new Error("Empty content");
+        console.warn("Received empty content from OpenAI.");
+        return "معلش، حصل مشكلة بسيطة. ممكن تكرر السؤال؟";
       }
       return formatForTelegram(content);
+
     } catch (error: any) {
       console.error(`Attempt failed. Retries left: ${retries}`, error);
 
-      // Handle Image Error (400 Bad Request: image url can not be accessed)
       if (error?.status === 400 && error?.error?.message?.includes("image")) {
+          // ... (image retry logic same as before)
           console.warn("Image access failed. Retrying without images...");
-
-          // Strip images from messages
           messages.forEach(m => {
               if (Array.isArray(m.content)) {
                   m.content = m.content
@@ -218,9 +222,6 @@ export const generateResponse = async (
                     .join("\n") + "\n[Image was here but expired]";
               }
           });
-
-          // Retry immediately without decrementing generic retries too much, or just continue loop
-          // We modified 'messages' in place, so next loop iteration uses text-only messages.
           continue;
       }
 
@@ -228,7 +229,6 @@ export const generateResponse = async (
       if (retries < 0) {
         return "معلش، الشبكة بتعلق شوية. ثانية واحدة وهجرب أرد عليك تاني... 🔄";
       }
-      // Wait a bit before retrying
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   }

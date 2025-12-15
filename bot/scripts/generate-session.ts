@@ -1,6 +1,6 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
-import input from "input"; // npm i input
+import input from "input";
 import dotenv from "dotenv";
 
 dotenv.config();
