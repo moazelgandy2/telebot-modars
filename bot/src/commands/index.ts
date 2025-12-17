@@ -5,7 +5,7 @@ import { NewMessage, NewMessageEvent } from "telegram/events/index.js";
 import { generateResponse } from "../services/openai.js";
 import { logConversation } from "../utils/conversationLogger.js";
 import { addToHistory, getHistory, clearHistory } from "../utils/memory.js";
-import { uploadMedia } from "../utils/uploader.js";
+import { uploadMedia, getPDFPageUrls } from "../utils/uploader.js";
 import config from "../config.js";
 import { findMatchingFAQ } from "../services/faq.js";
 
@@ -94,10 +94,7 @@ export const setupCommands = (client: TelegramClient) => {
 
             // Check if it's a PDF
             if (uploadResult.format === 'pdf' || mediaUrl.endsWith('.pdf')) {
-                 const { getPDFPageUrls } = await import("../utils/uploader.js");
-
-                 // Generally Cloudinary returns 'pages' count in response for PDFs (resource_type: image preferably or auto detecting it as image-like)
-                 // If uploaded as 'raw', pages might not be available. 'auto' often maps PDF to 'image' or 'raw' depending on settings.
+                 // Generally Cloudinary returns 'pages' count in response for PDFs
                  // We will assume 'image' resource type or that we can try to extract up to 5 pages blindly if count is missing.
 
                  const pageCount = uploadResult.pages || 5;
@@ -107,7 +104,17 @@ export const setupCommands = (client: TelegramClient) => {
                  if (pageCount > 5) {
                      await message.reply({ message: "ال PDF كبير شوية، هقرأ أول 5 صفحات بس وهركز فيهم يا بطل 📖" });
                  } else {
-                     await message.reply({ message: "جاري قراءة ملف الـ PDF... 📄" });
+                     const processingMessages = [
+                        "تمام وصل، ثانية واحدة بقرأه",
+                        "وصل يا غالي، هبص عليه وأرد عليك حالاً",
+                        "حلو أوي، دقيقة واحدة أقرأ الملف وأقولك",
+                        "تمام، سيبني أركز في الملف لحظة وأجيلك",
+                        "ماشي، هشوف الملف فيه إيه وأرد عليك علطول",
+                        "تمام، بقرأ الملف أهو.. ثواني",
+                        "وصلني، ثواني وأكون معاك بالرد"
+                     ];
+                     const randomMsg = processingMessages[Math.floor(Math.random() * processingMessages.length)];
+                     await message.reply({ message: randomMsg });
                  }
 
                  pdfPageUrls = getPDFPageUrls(uploadResult.public_id, pageCount);
