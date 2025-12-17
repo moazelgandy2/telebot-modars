@@ -86,8 +86,33 @@ export const setupCommands = (client: TelegramClient) => {
 
         // Upload to Cloudinary
         let mediaUrl = "";
+        let pdfPageUrls: string[] = [];
+
         try {
-            mediaUrl = await uploadMedia(buffer);
+            const uploadResult = await uploadMedia(buffer);
+            mediaUrl = uploadResult.secure_url;
+
+            // Check if it's a PDF
+            if (uploadResult.format === 'pdf' || mediaUrl.endsWith('.pdf')) {
+                 const { getPDFPageUrls } = await import("../utils/uploader.js");
+
+                 // Generally Cloudinary returns 'pages' count in response for PDFs (resource_type: image preferably or auto detecting it as image-like)
+                 // If uploaded as 'raw', pages might not be available. 'auto' often maps PDF to 'image' or 'raw' depending on settings.
+                 // We will assume 'image' resource type or that we can try to extract up to 5 pages blindly if count is missing.
+
+                 const pageCount = uploadResult.pages || 5;
+                 // If pages is undefined, we default to try 5. If it fails, the image load just fails.
+
+                 // Inform user
+                 if (pageCount > 5) {
+                     await message.reply({ message: "ال PDF كبير شوية، هقرأ أول 5 صفحات بس وهركز فيهم يا بطل 📖" });
+                 } else {
+                     await message.reply({ message: "جاري قراءة ملف الـ PDF... 📄" });
+                 }
+
+                 pdfPageUrls = getPDFPageUrls(uploadResult.public_id, pageCount);
+            }
+
         } catch (uploadError) {
              console.error("Cloudinary upload failed:", uploadError);
              await message.reply({ message: "فشل رفع الملف للسيرفر." });
@@ -100,12 +125,19 @@ export const setupCommands = (client: TelegramClient) => {
         const { name, username } = getSenderInfo(sender);
 
         // Construct Attachments Array
-        // Infer type simple check
         let mimeType = 'document';
         if (mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i)) mimeType = 'image/jpeg';
         else if (mediaUrl.match(/\.(mp4|webm|mov)$/i)) mimeType = 'video/mp4';
+        else if (mediaUrl.endsWith('.pdf') || pdfPageUrls.length > 0) mimeType = 'application/pdf';
 
         const attachments = [{ url: mediaUrl, type: mimeType }];
+
+        // If PDF pages exist, add them as "virtual" image attachments for the AI to see
+        let aiAttachments = [...attachments];
+        if (pdfPageUrls.length > 0) {
+            // Replace the PDF document attachment with its page images for the AI
+            aiAttachments = pdfPageUrls.map(url => ({ url, type: 'image/jpeg' }));
+        }
 
         // Log text part AND media URL
         await addToHistory(userId, "user", caption, username, attachments);
@@ -114,7 +146,7 @@ export const setupCommands = (client: TelegramClient) => {
         const history = await getHistory(userId);
         const response = await generateResponse(
             history,
-            attachments,
+            aiAttachments, // Send page images to AI instead of original PDF url if applicable
             async (msg) => { await message.reply({ message: msg }); }
         );
 
