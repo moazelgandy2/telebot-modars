@@ -3,12 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { Home, MessageSquare, Settings, ClipboardList, HelpCircle } from 'lucide-react';
+import { Home, MessageSquare, Settings, ClipboardList, HelpCircle, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/', label: 'الرئيسية', icon: Home },
   { href: '/chats', label: 'المحادثات', icon: MessageSquare },
+  { href: '/admin/subscriptions', label: 'المشتركين', icon: Users },
   { href: '/faqs', label: 'الأسئلة الشائعة', icon: HelpCircle },
   { href: '/system-instruction', label: 'توجيهات النظام', icon: ClipboardList },
   { href: '/settings', label: 'الإعدادات', icon: Settings },

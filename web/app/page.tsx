@@ -115,19 +115,19 @@ export default async function Dashboard() {
             </Card>
           </Link>
 
-          <div className="block h-full opacity-60 cursor-not-allowed">
-            <Card className="h-full border-muted/40 shadow-sm bg-muted/10">
+          <Link href="/admin/subscriptions" className="block h-full">
+            <Card className="h-full border-muted/40 shadow-sm hover:shadow-md hover:border-primary/30 transition-all bg-gradient-to-br from-card to-muted/20 cursor-pointer group">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-muted-foreground">
-                        <Activity className="w-5 h-5" />
-                        تحليلات متقدمة
+                    <CardTitle className="flex items-center gap-2 group-hover:text-primary transition-colors">
+                        <Users className="w-5 h-5 text-green-500" />
+                        إدارة المشتركين
                     </CardTitle>
                     <CardDescription>
-                        قريباً: إحصائيات تفصيلية عن الاستخدام.
+                        إضافة وإزالة المشتركين في نظام المتابعة.
                     </CardDescription>
                 </CardHeader>
             </Card>
-          </div>
+          </Link>
       </div>
     </div>
   );

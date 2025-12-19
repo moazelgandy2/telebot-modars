@@ -19,9 +19,25 @@ export async function GET(req: NextRequest) {
       });
       return NextResponse.json(session?.messages || []);
     } else {
-      // Get all sessions (for list view)
+      // Get all sessions (for list view) with Search & Pagination
+      const q = searchParams.get("q") || "";
+      const page = parseInt(searchParams.get("page") || "1");
+      const limit = parseInt(searchParams.get("limit") || "10");
+      const skip = (page - 1) * limit;
+
+      const where: any = {};
+      if (q) {
+          where.OR = [
+              { userId: { contains: q } }, // Prisma default is case-insensitive for strings in Postgres usually, but depends on collation.
+              { username: { contains: q, mode: 'insensitive' } } // Explicitly insensitive if possible, or just contains
+          ];
+      }
+
       const sessions = await prisma.chatSession.findMany({
+        where,
         orderBy: { updatedAt: "desc" },
+        take: limit,
+        skip: skip,
         select: {
           id: true,
           userId: true,

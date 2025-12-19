@@ -154,7 +154,8 @@ export const setupCommands = (client: TelegramClient) => {
         const response = await generateResponse(
             history,
             aiAttachments, // Send page images to AI instead of original PDF url if applicable
-            async (msg) => { await message.reply({ message: msg }); }
+            async (msg) => { await message.reply({ message: msg }); },
+            userId.toString()
         );
 
         await message.reply({ message: response });
@@ -201,7 +202,8 @@ export const setupCommands = (client: TelegramClient) => {
                 undefined,
                 async (intermediateMsg) => {
                   await message.reply({ message: intermediateMsg });
-                }
+                },
+                userId.toString()
             );
 
             await message.reply({ message: response });
