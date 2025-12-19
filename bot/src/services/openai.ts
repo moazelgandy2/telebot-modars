@@ -103,7 +103,8 @@ export const generateResponse = async (
   history: ChatMessage[],
   attachments?: { url: string; type: string }[],
   sendIntermediateMessage?: (msg: string) => Promise<void>,
-  telegramId?: string
+  isSubscribed?: boolean,
+  userId?: string
 ): Promise<string> => {
   if (!config.openaiApiKey) {
     return "OpenAI API key is missing in configuration.";
@@ -121,7 +122,10 @@ export const generateResponse = async (
     knowledgeBase += faqs.map((f, i) => `${i+1}. ${f.question}?\n${f.answer}`).join("\n");
   }
 
-  const enhancedSystemInstruction = systemInstruction + knowledgeBase;
+  // Inject User Context
+  const userContext = `\n\n[USER CONTEXT]\nSubscription Status: ${isSubscribed ? "ACTIVE (PREMIUM)" : "INACTIVE (FREE)"}\nUser ID: ${userId || "Unknown"}`;
+
+  const enhancedSystemInstruction = systemInstruction + knowledgeBase + userContext;
   console.log(`[DEBUG] System Instruction Length: ${enhancedSystemInstruction.length}`);
 
   const recentHistory = history.slice(-20);
@@ -177,20 +181,6 @@ export const generateResponse = async (
     }
   }
 
-  const tools: any[] = [
-      {
-          type: "function",
-          function: {
-              name: "check_sub",
-              description: "Checks if the user is subscribed to the premium study follow-up service. Call this BEFORE answering any academic or study-related questions.",
-              parameters: {
-                  type: "object",
-                  properties: {}, // No params needed as we use the context telegramId, but we can verify
-              },
-          },
-      },
-  ];
-
   let retries = 0;
   while (retries >= 0) {
     try {
@@ -199,57 +189,12 @@ export const generateResponse = async (
       const response = await client.chat.completions.create({
         messages: messages as any,
         model: deployment,
-        tools: tools,
-        tool_choice: "auto",
       });
 
       const choice = response.choices[0];
       const message = choice.message;
-
-      // Handle Tool Calls
-      if (message.tool_calls && message.tool_calls.length > 0) {
-           const toolCall = message.tool_calls[0] as any;
-           if (toolCall.function.name === "check_sub") {
-               console.log("[DEBUG] Tool call: check_sub");
-
-               let isSubscribed = false;
-               if (telegramId) {
-                   try {
-                       const res = await fetch(`${config.apiBaseUrl}/subscription?userId=${telegramId}`);
-                       const json: any = await res.json();
-                       if (json.success && json.isSubscribed) {
-                           isSubscribed = true;
-                       }
-                   } catch (e) {
-                       console.error("Failed to check subscription:", e);
-                   }
-               }
-
-               const toolResult = isSubscribed ? "true" : "false";
-               console.log(`[DEBUG] check_sub result: ${toolResult}`);
-
-               messages.push(message); // Add assistant's tool call message
-               messages.push({
-                   role: "tool",
-                   tool_call_id: toolCall.id,
-                   content: toolResult,
-               });
-
-               // Recursively call again with tool result
-               const followUpResponse = await client.chat.completions.create({
-                   messages: messages as any,
-                   model: deployment,
-               });
-
-               const followUpContent = followUpResponse.choices[0].message.content;
-                if (!followUpContent?.trim()) {
-                     return "معلش، النظام مشغول. ممكن تجرب تاني؟";
-                }
-               return formatForTelegram(followUpContent);
-           }
-      }
-
       const content = message.content;
+
       if (!content?.trim()) {
         console.warn("Received empty content from OpenAI.");
         return "معلش، حصل مشكلة بسيطة. ممكن تكرر السؤال؟";
@@ -258,7 +203,7 @@ export const generateResponse = async (
 
     } catch (error: any) {
       console.error(`Attempt failed. Retries left: ${retries}`, error);
-      // ... (existing retry logic for images could be kept or simplified)
+
        if (error?.status === 400 && error?.error?.message?.includes("image")) {
           console.warn("Image access failed. Retrying without images...");
           messages.forEach(m => {

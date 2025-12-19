@@ -1,7 +1,5 @@
 import { TelegramClient, Api } from "telegram";
 import { NewMessage, NewMessageEvent } from "telegram/events/index.js";
-
-
 import { generateResponse } from "../services/openai.js";
 import { logConversation } from "../utils/conversationLogger.js";
 import { addToHistory, getHistory, clearHistory } from "../utils/memory.js";
@@ -28,6 +26,18 @@ const getSenderInfo = (sender: any) => {
    }
 
    return { name, username: sender.username || undefined };
+};
+
+// Helper to check subscription
+const checkSubscription = async (userId: string): Promise<boolean> => {
+    try {
+        const res = await fetch(`${config.apiBaseUrl}/subscription?userId=${userId}`);
+        const json: any = await res.json();
+        return json.success && json.isSubscribed;
+    } catch (e) {
+        console.error("Failed to check subscription:", e);
+        return false;
+    }
 };
 
 export const setupCommands = (client: TelegramClient) => {
@@ -94,13 +104,8 @@ export const setupCommands = (client: TelegramClient) => {
 
             // Check if it's a PDF
             if (uploadResult.format === 'pdf' || mediaUrl.endsWith('.pdf')) {
-                 // Generally Cloudinary returns 'pages' count in response for PDFs
-                 // We will assume 'image' resource type or that we can try to extract up to 5 pages blindly if count is missing.
-
                  const pageCount = uploadResult.pages || 5;
-                 // If pages is undefined, we default to try 5. If it fails, the image load just fails.
 
-                 // Inform user
                  if (pageCount > 5) {
                      await message.reply({ message: "ال PDF كبير شوية، هقرأ أول 5 صفحات بس وهركز فيهم يا بطل 📖" });
                  } else {
@@ -142,12 +147,14 @@ export const setupCommands = (client: TelegramClient) => {
         // If PDF pages exist, add them as "virtual" image attachments for the AI to see
         let aiAttachments = [...attachments];
         if (pdfPageUrls.length > 0) {
-            // Replace the PDF document attachment with its page images for the AI
             aiAttachments = pdfPageUrls.map(url => ({ url, type: 'image/jpeg' }));
         }
 
         // Log text part AND media URL
         await addToHistory(userId, "user", caption, username, attachments);
+
+        // Check Subscription
+        const isSubscribed = await checkSubscription(userId.toString());
 
         // Pass URL directly to AI
         const history = await getHistory(userId);
@@ -155,6 +162,7 @@ export const setupCommands = (client: TelegramClient) => {
             history,
             aiAttachments, // Send page images to AI instead of original PDF url if applicable
             async (msg) => { await message.reply({ message: msg }); },
+            isSubscribed,
             userId.toString()
         );
 
@@ -181,19 +189,16 @@ export const setupCommands = (client: TelegramClient) => {
             const sender = await message.getSender();
             if (!sender || !('id' in sender)) return;
 
-            // memory.ts expects number, ensuring BigInt id fits or use string if memory.ts supported it.
-            // For now assuming it fits in number (safe up to 9 quadrillion).
             const userId = Number(sender.id);
             const { name, username } = getSenderInfo(sender);
 
             const me = await client.getMe();
             if (sender.id.toString() === me.id.toString()) return;
 
-            // Show typing... (GramJS doesn't have easy sendChatAction like Telegraf in same way, skipping for now)
-
-
-
             await addToHistory(userId, "user", text, username);
+
+            // Check Subscription
+            const isSubscribed = await checkSubscription(userId.toString());
 
             const history = await getHistory(userId);
 
@@ -203,6 +208,7 @@ export const setupCommands = (client: TelegramClient) => {
                 async (intermediateMsg) => {
                   await message.reply({ message: intermediateMsg });
                 },
+                isSubscribed,
                 userId.toString()
             );
 
