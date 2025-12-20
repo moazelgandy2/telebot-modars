@@ -498,10 +498,15 @@ bot.action("users_del", (ctx) => {
 bot.action("system_view", async (ctx) => {
     try {
         const res = await axios.get(`${config.apiBaseUrl}/system-instruction`);
-        if (res.data.success) {
-            await ctx.editMessageText(`📜 **التعليمات الحالية:**\n\n\`${res.data.data?.content || "لا يوجد"}\``, { parse_mode: "Markdown", ...SystemMenu });
+        if (res.data.success && res.data.data) {
+            await ctx.editMessageText(`📜 **التعليمات الحالية:**\n\n\`${res.data.data.content || "لا يوجد محتوى"}\``, { parse_mode: "Markdown", ...SystemMenu });
+        } else {
+            await ctx.answerCbQuery("No data found");
         }
-    } catch (e) { await ctx.answerCbQuery("Error"); }
+    } catch (e) {
+        console.error("System View Error:", e);
+        await ctx.answerCbQuery("Error fetching system");
+    }
 });
 
 bot.action("system_edit", (ctx) => {
@@ -542,9 +547,57 @@ bot.action("faqs_add_start", (ctx) => {
     ctx.editMessageText("❓ **سؤال جديد**\n\nابعتلي **نص السؤال**:", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
 });
 
-bot.action("faqs_del", (ctx) => {
-    setState(ctx.from!.id, { action: 'WAITING_DEL_FAQ' });
-    ctx.editMessageText("🗑️ **حذف سؤال**\n\nابعتلي **رقم الـ ID** بتاع السؤال:", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+// Interactive FAQ Delete
+bot.action("faqs_del", async (ctx) => {
+    try {
+        const res = await axios.get(`${config.apiBaseUrl}/faqs`);
+        if (res.data.success && res.data.data.length > 0) {
+            const buttons = res.data.data.map((f: any) => [
+                Markup.button.callback(`❌ ${f.question.substring(0, 30)}...`, `faq_confirm_del_${f.id}`)
+            ]);
+            buttons.push([CancelBtn]);
+            await ctx.editMessageText("🗑️ **اختار السؤال اللي عايز تحذفه:**", { parse_mode: "Markdown", ...Markup.inlineKeyboard(buttons) });
+        } else { await ctx.answerCbQuery("مفيش أسئلة!"); }
+    } catch (e) { await ctx.answerCbQuery("Error"); }
+});
+
+bot.action(/faq_confirm_del_(.+)/, async (ctx) => {
+    const id = ctx.match[1];
+    try {
+        await axios.delete(`${config.apiBaseUrl}/faqs`, { params: { id } });
+        await ctx.editMessageText("🗑️ **تم حذف السؤال بنجاح.**", { parse_mode: "Markdown", ...FaqsMenu });
+    } catch (e) { await ctx.answerCbQuery("Error"); }
+});
+
+// --- RESTORED Admin Delete Handlers ---
+bot.action("admins_del_list", async (ctx) => {
+    try {
+        const res = await axios.get(`${config.apiBaseUrl}/admins`);
+        if (res.data.success && res.data.data.length > 0) {
+            const buttons = res.data.data.map((a: any) => [Markup.button.callback(`❌ ${a.name || "بدون اسم"}`, `admin_select_del_${a.userId}`)]);
+            buttons.push([CancelBtn]);
+            await ctx.editMessageText("🗑️ **اختار الأدمن اللي عايز تحذفه:**", { parse_mode: "Markdown", ...Markup.inlineKeyboard(buttons) });
+        } else { await ctx.answerCbQuery("مفيش آدمنز يتحذفوا!"); }
+    } catch (e) { await ctx.answerCbQuery("Error"); }
+});
+
+bot.action(/admin_select_del_(.+)/, (ctx) => {
+    const userId = ctx.match[1];
+    ctx.editMessageText(`⚠️ **متأكد إنك عايز تحذف الأدمن ده؟**\n🆔 \`${userId}\``, {
+        parse_mode: "Markdown",
+        ...Markup.inlineKeyboard([
+            [Markup.button.callback("✅ نعم، احذف", `admin_confirm_del_${userId}`)],
+            [CancelBtn]
+        ])
+    });
+});
+
+bot.action(/admin_confirm_del_(.+)/, async (ctx) => {
+    const userId = ctx.match[1];
+    try {
+        await axios.delete(`${config.apiBaseUrl}/admins`, { params: { userId } });
+        await ctx.editMessageText("🗑️ **تم الحذف بنجاح.**", { parse_mode: "Markdown", ...AdminsMenu });
+    } catch (e) { await ctx.answerCbQuery("Error"); }
 });
 
 // --- Other Actions ---
