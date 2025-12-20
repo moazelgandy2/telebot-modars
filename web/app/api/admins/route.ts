@@ -15,7 +15,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { userId, name } = body;
+    const { userId, name, role, permissions } = body;
 
     if (!userId) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
@@ -27,7 +27,12 @@ export async function POST(req: NextRequest) {
     }
 
     const admin = await prisma.admin.create({
-      data: { userId, name },
+      data: {
+        userId,
+        name,
+        role: role || 'ADMIN',
+        permissions: permissions || []
+      },
     });
 
     return NextResponse.json({ success: true, data: admin });

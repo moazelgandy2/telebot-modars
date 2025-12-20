@@ -65,8 +65,10 @@ model Subscription {
 }
 
 model Admin {
-  id        String   @id @default(uuid())
-  userId    String   @unique // Telegram User ID
-  name      String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  userId      String   @unique // Telegram User ID
+  name        String?
+  role        String   @default("ADMIN")
+  permissions String[]
+  createdAt   DateTime @default(now())
 }

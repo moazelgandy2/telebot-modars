@@ -10,7 +10,7 @@ if (!config.botToken) {
 
 const bot = new Telegraf(config.botToken);
 
-// Verify Token immediately
+// Verify Token
 bot.telegram.getMe().then((botInfo) => {
     console.log(`✅ Token valid! Bot Name: ${botInfo.first_name} (@${botInfo.username})`);
 }).catch((err) => {
@@ -18,7 +18,13 @@ bot.telegram.getMe().then((botInfo) => {
     process.exit(1);
 });
 
-// --- State Management ---
+// --- Types ---
+interface AdminUser {
+    userId: string;
+    role: string; // 'SUPER_ADMIN', 'EDITOR', 'MODERATOR'
+    permissions: string[]; // 'MANAGE_USERS', 'MANAGE_CONTENT', 'MANAGE_ADMINS'
+}
+
 interface UserState {
   action?:
     | 'WAITING_ADD_USER_ID' | 'WAITING_ADD_USER_NAME'
@@ -26,7 +32,7 @@ interface UserState {
     | 'WAITING_SET_SYSTEM'
     | 'WAITING_ADD_FAQ_Q' | 'WAITING_ADD_FAQ_A'
     | 'WAITING_DEL_FAQ'
-    | 'WAITING_ADD_ADMIN_ID' | 'WAITING_ADD_ADMIN_NAME' | 'WAITING_DEL_ADMIN'; // New Admin States
+    | 'WAITING_ADD_ADMIN_ID' | 'WAITING_ADD_ADMIN_NAME' | 'WAITING_DEL_ADMIN';
   page?: number;
   tempData?: any;
 }
@@ -39,34 +45,46 @@ const setState = (userId: number, state: UserState) => {
 };
 const getState = (userId: number) => userStates.get(userId);
 
+// --- Auth & Permissions ---
+const getAdminProfile = async (userId: number): Promise<AdminUser | null> => {
+    // 1. Super Admins (Env) -> Full Access
+    if (config.adminIds.includes(userId)) {
+        return { userId: userId.toString(), role: 'SUPER_ADMIN', permissions: [] };
+    }
 
-const isAdmin = async (userId: number): Promise<boolean> => {
-    if (config.adminIds.includes(userId)) return true;
-
-    // 2. Check Database Admins
-    console.log(`Checking DB for Admin ID: ${userId}`);
+    // 2. Database Admins
     try {
         const res = await axios.get(`${config.apiBaseUrl}/admins`);
         if (res.data.success && Array.isArray(res.data.data)) {
-            const dbAdmins = res.data.data.map((a: any) => a.userId);
-            console.log("DB Admins:", dbAdmins);
-
-            const isMatch = dbAdmins.includes(userId.toString());
-            console.log(`Match Result: ${isMatch}`);
-            if (isMatch) return true;
-        } else {
-            console.warn("Invalid API response format for admins:", res.data);
+            const admin = res.data.data.find((a: any) => a.userId === userId.toString());
+            if (admin) {
+                return {
+                    userId: admin.userId,
+                    role: admin.role,
+                    permissions: admin.permissions || []
+                };
+            }
         }
     } catch (e) {
         console.error("Failed to fetch DB admins:", e);
     }
-    return false;
+    return null;
 };
 
+// Permission Check Helper
+const hasPermission = (admin: AdminUser, required: string): boolean => {
+    if (admin.role === 'SUPER_ADMIN') return true;
+    return admin.permissions.includes(required);
+};
+
+// Check Middleware
 bot.use(async (ctx, next) => {
   if (ctx.from) {
-      const isUserAdmin = await isAdmin(ctx.from.id);
-      if (isUserAdmin) return next();
+      const admin = await getAdminProfile(ctx.from.id);
+      if (admin) {
+          ctx.state.admin = admin; // Store for handlers
+          return next();
+      }
   }
   // Ignore unauthorized
 });
@@ -79,15 +97,37 @@ const createProgressBar = (current: number, total: number, length = 10) => {
     return '▓'.repeat(filled) + '░'.repeat(empty);
 };
 
-// --- Keyboards ---
+// --- Dynamic Keyboards (RBAC) ---
+const getMainMenu = (admin: AdminUser) => {
+    const buttons = [];
+    const row1 = [];
+    // Everyone sees Stats
+    row1.push(Markup.button.callback("📊 الإحصائيات", "menu_stats"));
+
+    // Manage Users
+    if (hasPermission(admin, 'MANAGE_USERS')) {
+        row1.push(Markup.button.callback("👥 المشتركين", "menu_users"));
+    }
+    buttons.push(row1);
+
+    const row2 = [];
+    // Manage Content
+    if (hasPermission(admin, 'MANAGE_CONTENT')) {
+        row2.push(Markup.button.callback("� السيستم", "menu_system"));
+        row2.push(Markup.button.callback("❓ الأسئلة", "menu_faqs"));
+    }
+    if (row2.length > 0) buttons.push(row2);
+
+    // Manage Admins (Super Admin only usually)
+    if (hasPermission(admin, 'MANAGE_ADMINS') || admin.role === 'SUPER_ADMIN') {
+        buttons.push([Markup.button.callback("� المساعدين (Admins)", "menu_admins")]);
+    }
+
+    return Markup.inlineKeyboard(buttons);
+};
+
 const BackToMainBtn = Markup.button.callback("الرئيسية 🏠", "menu_main");
 const CancelBtn = Markup.button.callback("إلغاء ❌", "cancel_action");
-
-const MainMenu = Markup.inlineKeyboard([
-  [Markup.button.callback("📊 الإحصائيات", "menu_stats"), Markup.button.callback("👥 المشتركين", "menu_users")],
-  [Markup.button.callback("📜 تعليمات النظام", "menu_system"), Markup.button.callback("❓ الأسئلة الشائعة", "menu_faqs")],
-  [Markup.button.callback("👮 المساعدين (Admins)", "menu_admins")]
-]);
 
 const UsersMenu = Markup.inlineKeyboard([
   [Markup.button.callback("عرض القائمة 📃", "users_list_0")],
@@ -113,44 +153,94 @@ const AdminsMenu = Markup.inlineKeyboard([
     [BackToMainBtn]
 ]);
 
-
 // --- Handlers ---
 bot.start((ctx) => {
   clearState(ctx.from.id);
-  ctx.reply("👋 **أهلاً يا ريس!**\nاختار اللي عايز تعمله من القائمة:", { parse_mode: "Markdown", ...MainMenu });
+  const admin = (ctx.state as any).admin;
+  ctx.reply("👋 **أهلاً يا ريس!**\nاختار اللي عايز تعمله من القائمة:", { parse_mode: "Markdown", ...getMainMenu(admin) });
 });
+
 bot.command("menu", (ctx) => {
     clearState(ctx.from.id);
-    ctx.reply("👋 **القائمة الرئيسية**", { parse_mode: "Markdown", ...MainMenu });
+    const admin = (ctx.state as any).admin;
+    ctx.reply("👋 **القائمة الرئيسية**", { parse_mode: "Markdown", ...getMainMenu(admin) });
 });
 
 bot.action("menu_main", (ctx) => {
   clearState(ctx.from!.id);
-  ctx.editMessageText("👋 **القائمة الرئيسية**\nتحب تعمل إيه النهارده؟", { parse_mode: "Markdown", ...MainMenu });
+  const admin = (ctx.state as any).admin;
+  ctx.editMessageText("👋 **القائمة الرئيسية**\nتحب تعمل إيه النهارده؟", { parse_mode: "Markdown", ...getMainMenu(admin) });
 });
-
-bot.action("menu_users", (ctx) => ctx.editMessageText("👥 **إدارة المشتركين**", { parse_mode: "Markdown", ...UsersMenu }));
-bot.action("menu_system", (ctx) => ctx.editMessageText("📜 **تعليمات النظام**", { parse_mode: "Markdown", ...SystemMenu }));
-bot.action("menu_faqs", (ctx) => ctx.editMessageText("❓ **إدارة الأسئلة**", { parse_mode: "Markdown", ...FaqsMenu }));
-bot.action("menu_admins", (ctx) => ctx.editMessageText("👮 **إدارة الآدمنز**", { parse_mode: "Markdown", ...AdminsMenu }));
 
 bot.action("cancel_action", (ctx) => {
     clearState(ctx.from!.id);
-    ctx.editMessageText("🚫 **تم الإلغاء.**", { parse_mode: "Markdown", ...MainMenu });
+    const admin = (ctx.state as any).admin;
+    ctx.editMessageText("� **تم الإلغاء.**", { parse_mode: "Markdown", ...getMainMenu(admin) });
     ctx.answerCbQuery("تم الإلغاء");
 });
 
+// --- Menu Navigation (With Permission Checks) ---
+bot.action("menu_users", (ctx) => {
+    const admin = (ctx.state as any).admin;
+    if (!hasPermission(admin, 'MANAGE_USERS')) return ctx.answerCbQuery("⛔ ليس لديك صلاحية!");
+    ctx.editMessageText("� **إدارة المشتركين**", { parse_mode: "Markdown", ...UsersMenu });
+});
+
+bot.action("menu_system", (ctx) => {
+    const admin = (ctx.state as any).admin;
+    if (!hasPermission(admin, 'MANAGE_CONTENT')) return ctx.answerCbQuery("⛔ ليس لديك صلاحية!");
+    ctx.editMessageText("📜 **تعليمات النظام**", { parse_mode: "Markdown", ...SystemMenu });
+});
+
+bot.action("menu_faqs", (ctx) => {
+    const admin = (ctx.state as any).admin;
+    if (!hasPermission(admin, 'MANAGE_CONTENT')) return ctx.answerCbQuery("⛔ ليس لديك صلاحية!");
+    ctx.editMessageText("❓ **إدارة الأسئلة**", { parse_mode: "Markdown", ...FaqsMenu });
+});
+
+bot.action("menu_admins", (ctx) => {
+    const admin = (ctx.state as any).admin;
+    if (!hasPermission(admin, 'MANAGE_ADMINS') && admin.role !== 'SUPER_ADMIN') return ctx.answerCbQuery("⛔ ليس لديك صلاحية!");
+    ctx.editMessageText(" **إدارة الآدمنز**", { parse_mode: "Markdown", ...AdminsMenu });
+});
+
+
 // --- Admins Management ---
+const RoleMap: Record<string, string> = {
+    'SUPER_ADMIN': 'مدير عام 🌟 (كامل الصلاحيات)',
+    'EDITOR': 'محرر ✏️ (يستطيع إدارة المحتوى والمستخدمين)',
+    'MODERATOR': 'مشرف 🛡️ (يستطيع إدارة المستخدمين فقط)'
+};
+const PermissionMap: Record<string, string> = {
+    'MANAGE_USERS': '👥 إدارة المشتركين (إضافة/حذف)',
+    'MANAGE_CONTENT': '📝 إدارة المحتوى (أسئلة/تعليمات)',
+    'MANAGE_ADMINS': '👮 إدارة الآدمنز'
+};
+
 bot.action("admins_list", async (ctx) => {
     try {
         const res = await axios.get(`${config.apiBaseUrl}/admins`);
         if (res.data.success) {
-            let msg = "**👮 قائمة الآدمنز:**\n\n";
+            let msg = "📋 **قائمة الآدمنز**\n━━━━━━━━━━━━━━━━\n\n";
             // Env Admins
-            config.adminIds.forEach(id => msg += `🔑 \`${id}\` (Super Admin)\n`);
+            config.adminIds.forEach(id => msg += `🔑 **Super Admin**\n🆔 \`${id}\`\n(صلاحيات كاملة)\n〰️〰️〰️〰️〰️\n`);
+
             // DB Admins
             if (res.data.data.length > 0) {
-                res.data.data.forEach((a: any) => msg += `👤 \`${a.userId}\` | ${a.name || "No Name"}\n`);
+                res.data.data.forEach((a: any) => {
+                    const roleName = RoleMap[a.role] || a.role;
+                    msg += `👤 **${a.name || "بدون اسم"}**\n`;
+                    msg += `🏷️ **الدور:** ${roleName}\n`;
+                    msg += `🆔 \`${a.userId}\`\n`;
+
+                    if(a.permissions && a.permissions.length > 0) {
+                        const perms = a.permissions.map((p: string) => PermissionMap[p] || p).join('، ');
+                        msg += `🔐 **الصلاحيات:** ${perms}\n`;
+                    }
+
+                    msg += `🔗 [بروفايل](tg://user?id=${a.userId})\n`;
+                    msg += `〰️〰️〰️〰️〰️\n`;
+                });
             } else {
                 msg += "(مفيش آدمنز إضافيين)";
             }
@@ -177,14 +267,13 @@ bot.action("admins_del", (ctx) => {
     );
 });
 
-
 // --- Text Handler ---
 bot.on("text", async (ctx) => {
   const userId = ctx.from.id;
   const state = getState(userId);
   if (!state || !state.action) return;
-
   const text = ctx.message.text.trim();
+  const admin = (ctx.state as any).admin; // For validation if needed
 
   // --- Add Admin Wizard ---
   if (state.action === 'WAITING_ADD_ADMIN_ID') {
@@ -197,10 +286,19 @@ bot.on("text", async (ctx) => {
   if (state.action === 'WAITING_ADD_ADMIN_NAME') {
       const id = state.tempData.id;
       const name = text;
+      // Default new admins to EDITOR role with typical permissions for now
+      // In a real/complex wizard we would ask for Role & Permissions too.
+      // For now, let's give them MANAGE_USERS and MANAGE_CONTENT by default.
       try {
-          const res = await axios.post(`${config.apiBaseUrl}/admins`, { userId: id, name });
+          const res = await axios.post(`${config.apiBaseUrl}/admins`, {
+              userId: id,
+              name,
+              role: 'EDITOR',
+              permissions: ['MANAGE_USERS', 'MANAGE_CONTENT']
+          });
+
           if (res.data.success) {
-              await ctx.reply(`🎉 **تم إضافة الأدمن بنجاح!**\n${name} (\`${id}\`)`, { parse_mode: "Markdown", ...AdminsMenu });
+              await ctx.reply(`🎉 **تم إضافة الأدمن بنجاح!**\n${name} (\`${id}\`)\nRole: EDITOR`, { parse_mode: "Markdown", ...AdminsMenu });
               clearState(userId);
           } else {
               await ctx.reply(`❌ خطأ: ${res.data.error}`, { ...AdminsMenu });
@@ -223,7 +321,7 @@ bot.on("text", async (ctx) => {
       return;
   }
 
-
+  // ... (Other handlers: User, FAQ, System) ...
   if (state.action === 'WAITING_ADD_USER_ID') {
       setState(userId, { action: 'WAITING_ADD_USER_NAME', tempData: { id: text } });
       await ctx.reply(`✅ تمام. الآيدي: \`${text}\`\n\n👤 **(خطوة 2/2)** اكتب اسم الطالب دلوقتي:`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
@@ -276,32 +374,32 @@ bot.on("text", async (ctx) => {
       } catch (e) { await ctx.reply("❌ Error"); }
       return;
   }
-
 });
 
+// --- Action Handlers (Stats, Pagination) ---
 bot.action("menu_stats", async (ctx) => {
   try {
     const res = await axios.get(`${config.apiBaseUrl}/stats`);
     if (res.data.success) {
       const { sessionsCount, messagesCount, instructionsCount, subscriptionsCount } = res.data.data;
       const subBar = createProgressBar(subscriptionsCount, 100);
-      await ctx.editMessageText(
-        `**📊 إحصائيات البوت**\n\n` +
-        `👥 **الجلسات النشطة:** \`${sessionsCount}\`\n` +
-        `💬 **إجمالي الرسائل:** \`${messagesCount}\`\n\n` +
-        `✅ **المشتركين الحاليين:** \`${subscriptionsCount}\`\n` +
-        `[${subBar}] ${subscriptionsCount}/100\n\n` +
-        `📜 **نسخ التعليمات:** \`${instructionsCount}\``,
-        { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[BackToMainBtn]]).reply_markup }
-      );
+
+      let msg = `📊 **إحصائيات البوت**\n━━━━━━━━━━━━━━━━\n\n`;
+      msg += `👥 **الجلسات النشطة:** \`${sessionsCount}\`\n`;
+      msg += `💬 **إجمالي الرسائل:** \`${messagesCount}\`\n\n`;
+      msg += `✅ **المشتركين الحاليين:** \`${subscriptionsCount}\`\n`;
+      msg += `[${subBar}] ${subscriptionsCount}/100\n\n`;
+      msg += `📜 **نسخ التعليمات:** \`${instructionsCount}\``;
+
+      await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[BackToMainBtn]]).reply_markup });
     }
   } catch (e) { await ctx.answerCbQuery("Error"); }
 });
 
-// User Pagination
+// User Pagination (Card Style)
 bot.action(/users_list_(\d+)/, async (ctx) => {
   const page = parseInt(ctx.match[1]);
-  const pageSize = 10;
+  const pageSize = 5; // Reduced page size for cards
   try {
     const res = await axios.get(`${config.apiBaseUrl}/subscription`);
     const data = res.data;
@@ -310,6 +408,7 @@ bot.action(/users_list_(\d+)/, async (ctx) => {
       const start = page * pageSize; const end = start + pageSize;
       const slice = data.data.slice(start, end);
       if (total === 0) { await ctx.editMessageText("📂 مفيش.", { reply_markup: UsersMenu.reply_markup }); return; }
+
       let msg = `📋 **قائمة المشتركين**\n🔢 الصفحة ${page + 1} من ${Math.ceil(total / pageSize)}\n━━━━━━━━━━━━━━━━\n\n`;
       slice.forEach((sub: any) => {
           const name = sub.name || "بدون اسم";
@@ -318,19 +417,20 @@ bot.action(/users_list_(\d+)/, async (ctx) => {
           msg += `🔗 [بروفايل الطالب](tg://user?id=${sub.userId})\n`;
           msg += `〰️〰️〰️〰️〰️\n`;
       });
+
       const buttons = [];
-      if (page > 0) buttons.push(Markup.button.callback("⬅️", `users_list_${page - 1}`));
-      if (end < total) buttons.push(Markup.button.callback("➡️", `users_list_${page + 1}`));
-      const kv = Markup.inlineKeyboard([buttons, [Markup.button.callback("🔙 رجوع", "menu_users")]]);
+      if (page > 0) buttons.push(Markup.button.callback("⬅️ السابق", `users_list_${page - 1}`));
+      if (end < total) buttons.push(Markup.button.callback("التالي ➡️", `users_list_${page + 1}`));
+      const kv = Markup.inlineKeyboard([buttons, [Markup.button.callback("🔙 القائمة السابقة", "menu_users")]]);
       await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: kv.reply_markup });
     }
   } catch(e) { await ctx.answerCbQuery("Error"); }
 });
 
-// FAQ Pagination
+// FAQ Pagination (Card Style)
 bot.action(/faqs_list_(\d+)/, async (ctx) => {
     const page = parseInt(ctx.match[1]);
-    const pageSize = 5;
+    const pageSize = 3; // Large cards, show fewer
     try {
         const res = await axios.get(`${config.apiBaseUrl}/faqs`);
         if (res.data.success) {
@@ -338,12 +438,19 @@ bot.action(/faqs_list_(\d+)/, async (ctx) => {
             const start = page * pageSize; const end = start + pageSize;
             const slice = res.data.data.slice(start, end);
              if (total === 0) { await ctx.editMessageText("📂 مفيش.", { reply_markup: FaqsMenu.reply_markup }); return; }
-            let msg = `**❓ الأسئلة (${start+1}-${Math.min(end,total)}):**\n\n`;
-            slice.forEach((f: any) => msg += `**س:** ${f.question}\n**ج:** ${f.answer}\n🆔 \`${f.id}\`\n---\n`);
+
+            let msg = `❓ **الأسئلة الشائعة**\n🔢 الصفحة ${page + 1} من ${Math.ceil(total / pageSize)}\n━━━━━━━━━━━━━━━━\n\n`;
+            slice.forEach((f: any) => {
+                msg += `🛑 **س:** ${f.question}\n`;
+                msg += `✅ **ج:** ${f.answer}\n`;
+                msg += `🆔 \`${f.id}\`\n`;
+                msg += `〰️〰️〰️〰️〰️\n`;
+            });
+
             const buttons = [];
-            if (page > 0) buttons.push(Markup.button.callback("⬅️", `faqs_list_${page - 1}`));
-            if (end < total) buttons.push(Markup.button.callback("➡️", `faqs_list_${page + 1}`));
-            const kv = Markup.inlineKeyboard([buttons, [Markup.button.callback("🔙 رجوع", "menu_faqs")]]);
+            if (page > 0) buttons.push(Markup.button.callback("⬅️ السابق", `faqs_list_${page - 1}`));
+            if (end < total) buttons.push(Markup.button.callback("التالي ➡️", `faqs_list_${page + 1}`));
+            const kv = Markup.inlineKeyboard([buttons, [Markup.button.callback("🔙 القائمة السابقة", "menu_faqs")]]);
             await ctx.editMessageText(msg, {parse_mode:"Markdown", reply_markup: kv.reply_markup});
         }
     } catch(e) { await ctx.answerCbQuery("Error"); }
@@ -381,7 +488,7 @@ bot.action("system_view", async (ctx) => {
 
 // Launch
 bot.launch().then(async () => {
-    console.log("🚀 Admin Bot Pro (DB Admins) started!");
+    console.log("🚀 Admin Bot Pro (RBAC Enabled) started!");
     try {
         await bot.telegram.setMyCommands([
             { command: "menu", description: "القائمة الرئيسية" },
