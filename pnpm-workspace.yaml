@@ -1,3 +1,4 @@
 packages:
   - bot
   - web
+  - admin-bot

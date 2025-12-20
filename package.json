@@ -5,12 +5,14 @@
   "packageManager": "pnpm@9.12.2",
   "workspaces": [
     "bot",
-    "web"
+    "web",
+    "admin-bot"
   ],
   "scripts": {
-    "dev": "npx concurrently -k \"pnpm --filter web dev\" \"npx wait-on tcp:3000 && pnpm --filter bot dev\"",
+    "dev": "npx concurrently -k \"pnpm --filter web dev\" \"npx wait-on tcp:3000 && pnpm --filter bot dev\" \"pnpm --filter admin-bot dev\"",
     "dev:bot": "pnpm --filter bot dev",
     "dev:web": "pnpm --filter web dev",
+    "dev:admin": "pnpm --filter admin-bot dev",
     "build": "pnpm -r build"
   },
   "devDependencies": {
