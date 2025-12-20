@@ -36,8 +36,9 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ success: true, data: admin });
-  } catch (error) {
-    return NextResponse.json({ success: false, error: 'Failed to add admin' }, { status: 500 });
+  } catch (error: any) {
+    console.error("POST Admin Error:", error);
+    return NextResponse.json({ success: false, error: error.message || 'Failed to add admin' }, { status: 500 });
   }
 }
 
