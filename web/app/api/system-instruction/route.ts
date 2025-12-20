@@ -2,6 +2,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 const DEFAULT_INSTRUCTION = `You are **Moaz's Admin**, a Mentor & Accountability Partner (Not a Teacher) for Thanaweya Amma students.
 
 ## 🎭 PERSONA & TONE
@@ -53,13 +55,12 @@ const DEFAULT_INSTRUCTION = `You are **Moaz's Admin**, a Mentor & Accountability
 
 export async function GET() {
   try {
-    // Try to find the active instruction
+
     let instruction = await prisma.systemInstruction.findFirst({
       where: { isActive: true },
       orderBy: { createdAt: 'desc' },
     });
 
-    // If none exists, seed the default one
     if (!instruction) {
       instruction = await prisma.systemInstruction.create({
         data: {

@@ -150,7 +150,7 @@ const getMainMenu = (admin: AdminUser) => {
 // Define constants here so they are available globally
 const UsersMenu = Markup.inlineKeyboard([
   [Markup.button.callback("عرض القائمة 📃", "users_list_0")],
-  [Markup.button.callback("➕ إضافة مشترك", "users_add_start"), Markup.button.callback("❌ حذف مشترك", "users_del")],
+  [Markup.button.callback("➕ إضافة مشترك", "users_add_start"), Markup.button.callback("❌ حذف مشترك", "users_del_list_0")],
   [BackToMainBtn]
 ]);
 
@@ -489,8 +489,51 @@ bot.action("users_add_start", (ctx) => {
 });
 
 bot.action("users_del", (ctx) => {
-    setState(ctx.from!.id, { action: 'WAITING_DEL_USER' });
-    ctx.editMessageText("🗑️ **حذف مشترك**\n\nابعتلي **الآيدي** لحذفه.", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+    ctx.editMessageText("🔄 جاري تحميل القائمة...", { parse_mode: "Markdown", ...Markup.inlineKeyboard([[Markup.button.callback("فتح قائمة الحذف ❌", "users_del_list_0")]]) });
+});
+
+bot.action(/users_del_list_(.+)/, async (ctx) => {
+    const page = parseInt(ctx.match[1]);
+    try {
+        const res = await axios.get(`${config.apiBaseUrl}/subscription`);
+        if (res.data.success) {
+            const users = res.data.data;
+            const perPage = 5;
+            const maxPage = Math.ceil(users.length / perPage) - 1;
+            const current = Math.min(Math.max(0, page), maxPage);
+            const start = current * perPage;
+            const chunk = users.slice(start, start + perPage);
+
+            const buttons = chunk.map((u:any) => [Markup.button.callback(`❌ حذف ${u.name || "مجهول"}`, `user_select_del_${u.userId}`)]);
+
+            const navButtons = [];
+            if (current > 0) navButtons.push(Markup.button.callback("⬅️ سابق", `users_del_list_${current - 1}`));
+            if (current < maxPage) navButtons.push(Markup.button.callback("تالي ➡️", `users_del_list_${current + 1}`));
+            if(navButtons.length > 0) buttons.push(navButtons);
+
+            buttons.push([CancelBtn]);
+
+            await ctx.editMessageText(`🗑️ **اختار المشترك لحذفه:**\nصفحة ${current + 1} من ${maxPage + 1}`, { parse_mode: "Markdown", ...Markup.inlineKeyboard(buttons) });
+        }
+    } catch (e) { await ctx.answerCbQuery("Error"); }
+});
+
+bot.action(/user_select_del_(.+)/, (ctx) => {
+    const userId = ctx.match[1];
+    ctx.editMessageText(`⚠️ **متأكد إنك عايز تحذف المشترك ده؟**\n🆔 \`${userId}\``, {
+        parse_mode: "Markdown",
+        ...Markup.inlineKeyboard([
+            [Markup.button.callback("✅ نعم، احذف", `user_confirm_del_${userId}`)],
+            [CancelBtn]
+        ])
+    });
+});
+bot.action(/user_confirm_del_(.+)/, async (ctx) => {
+    const userId = ctx.match[1];
+    try {
+        await axios.delete(`${config.apiBaseUrl}/subscription`, { params: { userId } });
+        await ctx.editMessageText("🗑️ **تم حذف المشترك بنجاح.**", { parse_mode: "Markdown", ...UsersMenu });
+    } catch (e) { await ctx.answerCbQuery("Error"); }
 });
 
 
@@ -499,7 +542,15 @@ bot.action("system_view", async (ctx) => {
     try {
         const res = await axios.get(`${config.apiBaseUrl}/system-instruction`);
         if (res.data.success && res.data.data) {
-            await ctx.editMessageText(`📜 **التعليمات الحالية:**\n\n\`${res.data.data.content || "لا يوجد محتوى"}\``, { parse_mode: "Markdown", ...SystemMenu });
+            const content = res.data.data.content || "لا يوجد محتوى";
+            try {
+                // Try Markdown first
+                await ctx.editMessageText(`📜 **التعليمات الحالية:**\n\n\`${content}\``, { parse_mode: "Markdown", ...SystemMenu });
+            } catch (mdError) {
+                console.warn("Markdown failed, falling back to plain text:", mdError);
+                // Fallback to plain text if Markdown fails (e.g. unescaped chars in content)
+                await ctx.editMessageText(`📜 التعليمات الحالية (Plain Text):\n\n${content}`, { ...SystemMenu });
+            }
         } else {
             await ctx.answerCbQuery("No data found");
         }
@@ -547,18 +598,28 @@ bot.action("faqs_add_start", (ctx) => {
     ctx.editMessageText("❓ **سؤال جديد**\n\nابعتلي **نص السؤال**:", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
 });
 
-// Interactive FAQ Delete
 bot.action("faqs_del", async (ctx) => {
     try {
         const res = await axios.get(`${config.apiBaseUrl}/faqs`);
         if (res.data.success && res.data.data.length > 0) {
             const buttons = res.data.data.map((f: any) => [
-                Markup.button.callback(`❌ ${f.question.substring(0, 30)}...`, `faq_confirm_del_${f.id}`)
+                Markup.button.callback(`❌ ${f.question.substring(0, 30)}...`, `faq_select_del_${f.id}`)
             ]);
             buttons.push([CancelBtn]);
             await ctx.editMessageText("🗑️ **اختار السؤال اللي عايز تحذفه:**", { parse_mode: "Markdown", ...Markup.inlineKeyboard(buttons) });
         } else { await ctx.answerCbQuery("مفيش أسئلة!"); }
     } catch (e) { await ctx.answerCbQuery("Error"); }
+});
+
+bot.action(/faq_select_del_(.+)/, (ctx) => {
+    const id = ctx.match[1];
+    ctx.editMessageText(`⚠️ **حذف السؤال ده نهائياً؟**`, {
+        parse_mode: "Markdown",
+        ...Markup.inlineKeyboard([
+            [Markup.button.callback("✅ حذف", `faq_confirm_del_${id}`)],
+            [CancelBtn]
+        ])
+    });
 });
 
 bot.action(/faq_confirm_del_(.+)/, async (ctx) => {
@@ -569,7 +630,7 @@ bot.action(/faq_confirm_del_(.+)/, async (ctx) => {
     } catch (e) { await ctx.answerCbQuery("Error"); }
 });
 
-// --- RESTORED Admin Delete Handlers ---
+
 bot.action("admins_del_list", async (ctx) => {
     try {
         const res = await axios.get(`${config.apiBaseUrl}/admins`);
@@ -600,7 +661,7 @@ bot.action(/admin_confirm_del_(.+)/, async (ctx) => {
     } catch (e) { await ctx.answerCbQuery("Error"); }
 });
 
-// --- Other Actions ---
+
 bot.action("menu_stats", async (ctx) => {
     try {
         const res = await axios.get(`${config.apiBaseUrl}/stats`);
