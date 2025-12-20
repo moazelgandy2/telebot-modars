@@ -13,7 +13,6 @@ export async function GET(request: Request) {
         });
         return NextResponse.json({ success: true, isSubscribed: !!sub, data: sub });
       } else {
-         // List all subscriptions
          const subs = await prisma.subscription.findMany({
              orderBy: { createdAt: 'desc' }
          });

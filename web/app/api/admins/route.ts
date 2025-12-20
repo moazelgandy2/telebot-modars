@@ -21,14 +21,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
     }
 
-    const existing = await prisma.admin.findUnique({ where: { userId } });
+    const existing = await prisma.admin.findUnique({ where: { userId: String(userId) } });
     if (existing) {
         return NextResponse.json({ success: false, error: 'Admin already exists' }, { status: 400 });
     }
 
     const admin = await prisma.admin.create({
       data: {
-        userId,
+        userId: String(userId),
         name,
         role: role || 'ADMIN',
         permissions: permissions || []
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, data: admin });
   } catch (error: any) {
     console.error("POST Admin Error:", error);
-    return NextResponse.json({ success: false, error: error.message || 'Failed to add admin' }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message || 'Failed to add admin', details: error }, { status: 500 });
   }
 }
 
@@ -51,10 +51,11 @@ export async function DELETE(req: NextRequest) {
   }
 
   try {
-    await prisma.admin.delete({ where: { userId } });
+    await prisma.admin.delete({ where: { userId: String(userId) } });
     return NextResponse.json({ success: true, message: 'Admin deleted' });
-  } catch (error) {
-    return NextResponse.json({ success: false, error: 'Failed to delete admin' }, { status: 500 });
+  } catch (error: any) {
+    console.error("DELETE Admin Error:", error);
+    return NextResponse.json({ success: false, error: error.message || 'Failed to delete admin', details: error }, { status: 500 });
   }
 }
 
@@ -68,7 +69,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const updatedAdmin = await prisma.admin.update({
-      where: { userId },
+      where: { userId: String(userId) },
       data: {
         ...(name && { name }),
         ...(role && { role }),
@@ -77,8 +78,8 @@ export async function PATCH(req: NextRequest) {
     });
 
     return NextResponse.json({ success: true, data: updatedAdmin });
-  } catch (error) {
-    console.error("Update Admin Error:", error);
-    return NextResponse.json({ success: false, error: 'Failed to update admin' }, { status: 500 });
+  } catch (error: any) {
+    console.error("PATCH Admin Error:", error);
+    return NextResponse.json({ success: false, error: error.message || 'Failed to update admin', details: error }, { status: 500 });
   }
 }
