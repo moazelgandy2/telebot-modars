@@ -168,8 +168,8 @@ const FaqsMenu = Markup.inlineKeyboard([
 
 const AdminsMenu = Markup.inlineKeyboard([
     [Markup.button.callback("عرض القائمة 📃", "admins_list")],
-    [Markup.button.callback("➕ إضافة أدمن", "admins_add_start"), Markup.button.callback("✏️ تعديل أدمن", "admins_edit_start")],
-    [Markup.button.callback("❌ حذف أدمن", "admins_del")],
+    [Markup.button.callback("➕ إضافة أدمن", "admins_add_start"), Markup.button.callback("✏️ تعديل أدمن", "admins_edit_list")],
+    [Markup.button.callback("❌ حذف أدمن", "admins_del_list")],
     [BackToMainBtn]
 ]);
 
@@ -275,9 +275,34 @@ bot.action("add_admin_save", async (ctx) => {
 });
 
 // 3. EDIT (Flow)
+bot.action("admins_edit_list", async (ctx) => {
+    try {
+        const res = await axios.get(`${config.apiBaseUrl}/admins`);
+        if (res.data.success && res.data.data.length > 0) {
+           const buttons = res.data.data.map((a: any) => [Markup.button.callback(`✏️ ${a.name || "بدون اسم"} (${RoleMap[a.role]?.split('(')[0] || a.role})`, `admin_select_edit_${a.userId}`)]);
+           buttons.push([CancelBtn]);
+           await ctx.editMessageText("✏️ **اختار الأدمن اللي عايز تعدله:**", { parse_mode: "Markdown", ...Markup.inlineKeyboard(buttons) });
+        } else {
+            await ctx.answerCbQuery("مفيش آدمنز يتعدلوا!");
+        }
+    } catch(e) { await ctx.answerCbQuery("Error"); }
+});
+
+bot.action(/admin_select_edit_(.+)/, async (ctx) => {
+    const userId = ctx.match[1];
+    try {
+        const res = await axios.get(`${config.apiBaseUrl}/admins`);
+        const target = res.data.data.find((a:any) => a.userId === userId);
+        if (target) {
+            setState(ctx.from!.id, { action: 'WAITING_EDIT_ADMIN_SELECT', tempData: { admin: target } });
+            await ctx.editMessageText(`⚙️ **تعديل الأدمن:** ${target.name}`, { parse_mode: "Markdown", ...getEditAdminMenu(target) });
+        } else { await ctx.answerCbQuery("Not found"); }
+    } catch(e) { await ctx.answerCbQuery("Error"); }
+});
+
 bot.action("admins_edit_start", (ctx) => {
-    setState(ctx.from!.id, { action: 'WAITING_EDIT_ADMIN_ID' });
-    ctx.editMessageText("✏️ **تعديل أدمن**\n\nابعتلي **الآيدي** بتاعه.", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+    // Legacy fallback (IDK if needed, but keeping logic clean) or redirect to list
+    ctx.editMessageText("⚠️ استخدم القائمة لاختيار الأدمن.", { reply_markup: Markup.inlineKeyboard([[Markup.button.callback("القائمة", "admins_edit_list")]]).reply_markup });
 });
 // (Text Handler gets ID, fetches info, shows Edit Menu)
 
@@ -376,11 +401,7 @@ bot.on("text", async (ctx) => {
 
     // ... (Existing Handlers for User/FAQ/System/DelAdmin) ...
     if (state.action === 'WAITING_DEL_ADMIN') {
-        try {
-            await axios.delete(`${config.apiBaseUrl}/admins`, { params: { userId: text } });
-            await ctx.reply("🗑️ **تم الحذف.**", { parse_mode: "Markdown", ...AdminsMenu });
-            clearState(userId);
-        } catch (e) { await ctx.reply("❌ Error"); }
+        // Redundant with list flow, but keeping for safety if state persists
         return;
     }
    if (state.action === 'WAITING_ADD_USER_ID') {
@@ -433,6 +454,97 @@ bot.on("text", async (ctx) => {
       } catch (e) { await ctx.reply("❌ Error"); }
       return;
   }
+});
+
+// --- Users Management Handlers ---
+bot.action(/users_list_(.+)/, async (ctx) => {
+    const page = parseInt(ctx.match[1]);
+    try {
+        const res = await axios.get(`${config.apiBaseUrl}/subscription`);
+        if (res.data.success) {
+            const users = res.data.data;
+            const perPage = 5;
+            const maxPage = Math.ceil(users.length / perPage) - 1;
+            const current = Math.min(Math.max(0, page), maxPage);
+            const start = current * perPage;
+            const chunk = users.slice(start, start + perPage);
+
+            let msg = `👥 **قائمة المشتركين (${users.length})**\nصفحة ${current + 1} من ${maxPage + 1}\n━━━━━━━━━━━━━━━━\n`;
+            chunk.forEach((u: any) => {
+                msg += `👤 **${u.name || "مجهول"}**\n🆔 \`${u.userId}\`\n📅 ${new Date(u.createdAt).toLocaleDateString()}\n〰️〰️〰️\n`;
+            });
+
+            const buttons = [];
+            if (current > 0) buttons.push(Markup.button.callback("⬅️ سابق", `users_list_${current - 1}`));
+            if (current < maxPage) buttons.push(Markup.button.callback("تالي ➡️", `users_list_${current + 1}`));
+
+            await ctx.editMessageText(msg, { parse_mode: "Markdown", ...Markup.inlineKeyboard([buttons, [BackToMainBtn]]) });
+        }
+    } catch (e) { await ctx.answerCbQuery("Error"); }
+});
+
+bot.action("users_add_start", (ctx) => {
+    setState(ctx.from!.id, { action: 'WAITING_ADD_USER_ID' });
+    ctx.editMessageText("👥 **إضافة مشترك جديد**\n\nابعتلي **الآيدي** بتاع الطالب.", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+});
+
+bot.action("users_del", (ctx) => {
+    setState(ctx.from!.id, { action: 'WAITING_DEL_USER' });
+    ctx.editMessageText("🗑️ **حذف مشترك**\n\nابعتلي **الآيدي** لحذفه.", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+});
+
+
+// --- System Handlers ---
+bot.action("system_view", async (ctx) => {
+    try {
+        const res = await axios.get(`${config.apiBaseUrl}/system-instruction`);
+        if (res.data.success) {
+            await ctx.editMessageText(`📜 **التعليمات الحالية:**\n\n\`${res.data.data?.content || "لا يوجد"}\``, { parse_mode: "Markdown", ...SystemMenu });
+        }
+    } catch (e) { await ctx.answerCbQuery("Error"); }
+});
+
+bot.action("system_edit", (ctx) => {
+    setState(ctx.from!.id, { action: 'WAITING_SET_SYSTEM' });
+    ctx.editMessageText("✏️ **تعديل التعليمات**\n\nابعتلي النص الجديد:", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+});
+
+
+// --- FAQ Handlers ---
+bot.action(/faqs_list_(.+)/, async (ctx) => {
+    const page = parseInt(ctx.match[1]);
+    try {
+        const res = await axios.get(`${config.apiBaseUrl}/faqs`);
+        if (res.data.success) {
+            const faqs = res.data.data;
+            const perPage = 3;
+            const maxPage = Math.ceil(faqs.length / perPage) - 1;
+            const current = Math.min(Math.max(0, page), maxPage);
+            const start = current * perPage;
+            const chunk = faqs.slice(start, start + perPage);
+
+            let msg = `❓ **الأسئلة الشائعة (${faqs.length})**\nصفحة ${current + 1} من ${maxPage + 1}\n━━━━━━━━━━━━━━━━\n`;
+            chunk.forEach((f: any) => {
+                msg += `🔹 **س:** ${f.question}\n🔸 **ج:** ${f.answer}\n🆔 #${f.id}\n〰️〰️〰️\n`;
+            });
+
+            const buttons = [];
+            if (current > 0) buttons.push(Markup.button.callback("⬅️ سابق", `faqs_list_${current - 1}`));
+            if (current < maxPage) buttons.push(Markup.button.callback("تالي ➡️", `faqs_list_${current + 1}`));
+
+            await ctx.editMessageText(msg, { parse_mode: "Markdown", ...Markup.inlineKeyboard([buttons, [BackToMainBtn]]) });
+        }
+    } catch (e) { await ctx.answerCbQuery("Error"); }
+});
+
+bot.action("faqs_add_start", (ctx) => {
+    setState(ctx.from!.id, { action: 'WAITING_ADD_FAQ_Q' });
+    ctx.editMessageText("❓ **سؤال جديد**\n\nابعتلي **نص السؤال**:", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+});
+
+bot.action("faqs_del", (ctx) => {
+    setState(ctx.from!.id, { action: 'WAITING_DEL_FAQ' });
+    ctx.editMessageText("🗑️ **حذف سؤال**\n\nابعتلي **رقم الـ ID** بتاع السؤال:", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
 });
 
 // --- Other Actions ---
