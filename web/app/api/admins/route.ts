@@ -56,3 +56,28 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Failed to delete admin' }, { status: 500 });
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { userId, name, role, permissions } = body;
+
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
+    }
+
+    const updatedAdmin = await prisma.admin.update({
+      where: { userId },
+      data: {
+        ...(name && { name }),
+        ...(role && { role }),
+        ...(permissions && { permissions }),
+      },
+    });
+
+    return NextResponse.json({ success: true, data: updatedAdmin });
+  } catch (error) {
+    console.error("Update Admin Error:", error);
+    return NextResponse.json({ success: false, error: 'Failed to update admin' }, { status: 500 });
+  }
+}
