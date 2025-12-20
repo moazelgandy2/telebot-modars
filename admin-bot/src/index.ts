@@ -43,11 +43,19 @@ const getState = (userId: number) => userStates.get(userId);
 const isAdmin = async (userId: number): Promise<boolean> => {
     if (config.adminIds.includes(userId)) return true;
 
+    // 2. Check Database Admins
+    console.log(`Checking DB for Admin ID: ${userId}`);
     try {
         const res = await axios.get(`${config.apiBaseUrl}/admins`);
         if (res.data.success && Array.isArray(res.data.data)) {
             const dbAdmins = res.data.data.map((a: any) => a.userId);
-            // return dbAdmins.includes(userId.toString());
+            console.log("DB Admins:", dbAdmins);
+
+            const isMatch = dbAdmins.includes(userId.toString());
+            console.log(`Match Result: ${isMatch}`);
+            if (isMatch) return true;
+        } else {
+            console.warn("Invalid API response format for admins:", res.data);
         }
     } catch (e) {
         console.error("Failed to fetch DB admins:", e);
