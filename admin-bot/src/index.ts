@@ -26,7 +26,6 @@ interface UserState {
     | 'WAITING_SET_SYSTEM'
     | 'WAITING_ADD_FAQ_Q' | 'WAITING_ADD_FAQ_A'
     | 'WAITING_DEL_FAQ'
-    | 'WAITING_BROADCAST_MSG' | 'WAITING_BROADCAST_CONFIRM'
     | 'WAITING_ADD_ADMIN_ID' | 'WAITING_ADD_ADMIN_NAME' | 'WAITING_DEL_ADMIN'; // New Admin States
   page?: number;
   tempData?: any;
@@ -79,7 +78,7 @@ const CancelBtn = Markup.button.callback("إلغاء ❌", "cancel_action");
 const MainMenu = Markup.inlineKeyboard([
   [Markup.button.callback("📊 الإحصائيات", "menu_stats"), Markup.button.callback("👥 المشتركين", "menu_users")],
   [Markup.button.callback("📜 تعليمات النظام", "menu_system"), Markup.button.callback("❓ الأسئلة الشائعة", "menu_faqs")],
-  [Markup.button.callback("👮 المساعدين (Admins)", "menu_admins"), Markup.button.callback("📢 إذاعة (Broadcast)", "menu_broadcast")]
+  [Markup.button.callback("👮 المساعدين (Admins)", "menu_admins")]
 ]);
 
 const UsersMenu = Markup.inlineKeyboard([
@@ -106,9 +105,6 @@ const AdminsMenu = Markup.inlineKeyboard([
     [BackToMainBtn]
 ]);
 
-const ConfirmBroadcastMenu = Markup.inlineKeyboard([
-  [Markup.button.callback("✅ تأكيد وإرسال", "broadcast_send"), Markup.button.callback("إلغاء ❌", "cancel_action")]
-]);
 
 // --- Handlers ---
 bot.start((ctx) => {
@@ -219,8 +215,6 @@ bot.on("text", async (ctx) => {
       return;
   }
 
-  // ... (Include previous handlers for User/FAQ/System/Broadcast here) ...
-  // Re-inserting simplified previous logic for context completeness
 
   if (state.action === 'WAITING_ADD_USER_ID') {
       setState(userId, { action: 'WAITING_ADD_USER_NAME', tempData: { id: text } });
@@ -275,15 +269,8 @@ bot.on("text", async (ctx) => {
       return;
   }
 
-   if (state.action === 'WAITING_BROADCAST_MSG') {
-      setState(userId, { action: 'WAITING_BROADCAST_CONFIRM', tempData: { msg: text } });
-      await ctx.reply(`📢 **مراجعة الرسالة**\n\n"${text}"\n\n⚠️ **متأكد عايز تبعتها لكل الناس؟**`, { parse_mode: "Markdown", ...ConfirmBroadcastMenu });
-      return;
-  }
-
 });
 
-// --- Other Action Handlers (Stats, Broadcast, Pagination) ---
 bot.action("menu_stats", async (ctx) => {
   try {
     const res = await axios.get(`${config.apiBaseUrl}/stats`);
@@ -301,16 +288,6 @@ bot.action("menu_stats", async (ctx) => {
       );
     }
   } catch (e) { await ctx.answerCbQuery("Error"); }
-});
-
-bot.action("broadcast_send", async (ctx) => {
-    const state = getState(ctx.from!.id);
-    if (!state || !state.tempData || !state.tempData.msg) return;
-    try {
-        // Mock Broadcast
-        await ctx.editMessageText(`✅ **تم الإرسال بنجاح!** (محاكاة)\nالرسالة:\n${state.tempData.msg}`, { parse_mode: "Markdown", ...MainMenu });
-    } catch(e) {}
-    clearState(ctx.from!.id);
 });
 
 // User Pagination
@@ -385,10 +362,6 @@ bot.action("system_view", async (ctx) => {
             await ctx.editMessageText(`**📜:**\n\`${res.data.data.content.substring(0, 3000)}\``, { parse_mode: "Markdown", ...SystemMenu });
         }
     } catch(e) { await ctx.answerCbQuery("Error"); }
-});
-bot.action("menu_broadcast", (ctx) => {
-    setState(ctx.from!.id, { action: 'WAITING_BROADCAST_MSG' });
-    ctx.editMessageText("📢 **إذاعة**\n\nاكتب الرسالة.", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
 });
 
 
