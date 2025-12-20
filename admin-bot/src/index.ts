@@ -48,7 +48,7 @@ const isAdmin = async (userId: number): Promise<boolean> => {
         const res = await axios.get(`${config.apiBaseUrl}/admins`);
         if (res.data.success && Array.isArray(res.data.data)) {
             const dbAdmins = res.data.data.map((a: any) => a.userId);
-            return dbAdmins.includes(userId.toString());
+            // return dbAdmins.includes(userId.toString());
         }
     } catch (e) {
         console.error("Failed to fetch DB admins:", e);
