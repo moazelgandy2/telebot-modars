@@ -310,8 +310,14 @@ bot.action(/users_list_(\d+)/, async (ctx) => {
       const start = page * pageSize; const end = start + pageSize;
       const slice = data.data.slice(start, end);
       if (total === 0) { await ctx.editMessageText("📂 مفيش.", { reply_markup: UsersMenu.reply_markup }); return; }
-      let msg = `**📃 المشتركين (${start + 1}-${Math.min(end, total)} من ${total}):**\n\n`;
-      slice.forEach((sub: any) => msg += `🆔 \`${sub.userId}\` | ${sub.name}\n`);
+      let msg = `📋 **قائمة المشتركين**\n🔢 الصفحة ${page + 1} من ${Math.ceil(total / pageSize)}\n━━━━━━━━━━━━━━━━\n\n`;
+      slice.forEach((sub: any) => {
+          const name = sub.name || "بدون اسم";
+          msg += `👤 **${name}**\n`;
+          msg += `🆔 \`${sub.userId}\`\n`;
+          msg += `🔗 [بروفايل الطالب](tg://user?id=${sub.userId})\n`;
+          msg += `〰️〰️〰️〰️〰️\n`;
+      });
       const buttons = [];
       if (page > 0) buttons.push(Markup.button.callback("⬅️", `users_list_${page - 1}`));
       if (end < total) buttons.push(Markup.button.callback("➡️", `users_list_${page + 1}`));
