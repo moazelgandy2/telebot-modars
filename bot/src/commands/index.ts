@@ -44,6 +44,7 @@ export const setupCommands = (client: TelegramClient) => {
 
   client.addEventHandler(async (event: NewMessageEvent) => {
     if (!event.isPrivate) return;
+    if (event.message.out) return;
 
     const sender = await event.message.getSender();
     if (sender && 'bot' in sender && sender.bot) return;
