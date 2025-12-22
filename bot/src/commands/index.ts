@@ -177,25 +177,39 @@ export const setupCommands = (client: TelegramClient) => {
         // Check Subscription
         const isSubscribed = await checkSubscription(userId.toString());
 
-        // Pass URL directly to AI
+                // Pass URL directly to AI
         const history = await getHistory(userId);
         const response = await generateResponse(
             history,
             aiAttachments, // Send page images to AI instead of original PDF url if applicable
             async (msg) => { await message.reply({ message: msg }); },
             isSubscribed,
-            userId.toString()
+            userId.toString(),
+            async (emoji) => {
+                try {
+                    await client.invoke(new Api.messages.SendReaction({
+                        peer: sender,
+                        msgId: message.id,
+                        reaction: [new Api.ReactionEmoji({ emoticon: emoji })]
+                    }));
+                } catch(e) { console.error("Reaction failed:", e); }
+            }
         );
 
-        await message.reply({ message: response });
-        await addToHistory(userId, "model", response, username);
+        if (response) {
+             await message.reply({ message: response });
+             await addToHistory(userId, "model", response, username);
 
-        await logConversation(
-            userId,
-            name,
-            `[Attachment: ${mediaUrl}] ${caption}`,
-            response
-        );
+             await logConversation(
+                userId,
+                name,
+                `[Attachment: ${mediaUrl}] ${caption}`,
+                response
+             );
+        } else {
+             await addToHistory(userId, "model", "[Reaction Sent]", username);
+             await logConversation(userId, name, `[Attachment: ${mediaUrl}] ${caption}`, "[Reaction Sent]");
+        }
 
       } catch (error) {
         console.error("Error processing media:", error);
@@ -229,18 +243,33 @@ export const setupCommands = (client: TelegramClient) => {
                       /* Optional: could enable streaming token updates here if supported */
                     },
                     isSubscribed,
-                    userId.toString()
+                    userId.toString(),
+                    async (emoji) => {
+                        try {
+                           // Use inputPeer if possible or sender
+                           // client.invoke automatically handles casting often, but strictly:
+                           // peer needs to be InputPeer. 'sender' from getSender() is usually an Entity.
+                           // latestEvent.message.getInputChat() might be safer or latestEvent.getInputChat()
+                           // But passing 'sender' (Entity) usually works in gramjs high-level invoke wrappers?
+                           // Let's use latestEvent.message.chatId or similar.
+                           // Actually, 'sender' object works for 'peer'.
+                            await client.invoke(new Api.messages.SendReaction({
+                                peer: sender,
+                                msgId: latestEvent.message.id,
+                                reaction: [new Api.ReactionEmoji({ emoticon: emoji })]
+                            }));
+                        } catch(e) { console.error("Reaction failed:", e); }
+                    }
                 );
 
-                await latestEvent.message.reply({ message: response });
-                await addToHistory(userId, "model", response, username);
-
-                 await logConversation(
-                    userId,
-                    name,
-                    aggregatedText,
-                    response
-                );
+                if (response) {
+                    await latestEvent.message.reply({ message: response });
+                    await addToHistory(userId, "model", response, username);
+                    await logConversation(userId, name, aggregatedText, response);
+                } else {
+                    await addToHistory(userId, "model", "[Reaction Sent]", username);
+                    await logConversation(userId, name, aggregatedText, "[Reaction Sent]");
+                }
 
             } catch (error) {
                 console.error("Error processing aggregated text:", error);
@@ -266,6 +295,13 @@ export const setupCommands = (client: TelegramClient) => {
                 timer: setTimeout(() => processAggregatedMessage(userId, newText, event), 2000)
             });
         } else {
+            try {
+                await client.invoke(new Api.messages.SetTyping({
+                    peer: sender,
+                    action: new Api.SendMessageTypingAction()
+                }));
+            } catch (e) { console.error("Typing status failed", e); }
+
             messageBuffers.set(userIdStr, {
                 text: text,
                 event: event,
