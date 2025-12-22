@@ -63,7 +63,9 @@ export const setupCommands = (client: TelegramClient) => {
     }
 
     const sender = await event.message.getSender();
+    // Ignore other bots and Telegram Service (777000, 42777)
     if (sender && 'bot' in sender && sender.bot) return;
+    if (sender && 'id' in sender && (sender.id.toString() === "777000" || sender.id.toString() === "42777")) return;
 
     const message = event.message;
 
