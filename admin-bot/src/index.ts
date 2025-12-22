@@ -35,7 +35,8 @@ interface UserState {
     | 'WAITING_DEL_FAQ'
     | 'WAITING_ADD_ADMIN_ID' | 'WAITING_ADD_ADMIN_NAME' | 'WAITING_ADD_ADMIN_ROLE' | 'WAITING_ADD_ADMIN_PERMS'
     | 'WAITING_DEL_ADMIN'
-    | 'WAITING_EDIT_ADMIN_ID' | 'WAITING_EDIT_ADMIN_SELECT' | 'WAITING_EDIT_ADMIN_NAME';
+    | 'WAITING_EDIT_ADMIN_ID' | 'WAITING_EDIT_ADMIN_SELECT' | 'WAITING_EDIT_ADMIN_NAME'
+    | 'WAITING_SET_HOURS_START' | 'WAITING_SET_HOURS_END';
   page?: number;
   tempData?: any;
 }
@@ -158,6 +159,7 @@ const UsersMenu = Markup.inlineKeyboard([
 const SystemMenu = Markup.inlineKeyboard([
   [Markup.button.callback("عرض الحالية 👀", "system_view")],
   [Markup.button.callback("تعديل التعليمات ✏️", "system_edit")],
+  [Markup.button.callback("🕰️ ساعات العمل", "hours_view")],
   [BackToMainBtn]
 ]);
 
@@ -629,7 +631,28 @@ bot.on("text", async (ctx) => {
       } catch (e: any) {
         console.error("Error:", e);
         const err = e.response?.data?.error || e.message || "Unknown Error";
-        await ctx.reply(`❌ **حدث خطأ:**\n\`${err}\``, { parse_mode: "Markdown" });
+      }
+      return;
+  }
+
+  // Working Hours Text Handlers
+  if (state.action === 'WAITING_SET_HOURS_START' || state.action === 'WAITING_SET_HOURS_END') {
+      const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/; // HH:MM
+      if (!timeRegex.test(text)) {
+          await ctx.reply("⚠️ صيغة وقت غير صحيحة. لازم تكون `HH:MM` (مثال: `09:30`).", { parse_mode: "Markdown" });
+          return;
+      }
+
+      const key = state.action === 'WAITING_SET_HOURS_START' ? 'aiWorkStart' : 'aiWorkEnd';
+      const label = state.action === 'WAITING_SET_HOURS_START' ? 'البداية' : 'النهاية';
+
+      try {
+          await axios.post(`${config.apiBaseUrl}/settings`, { [key]: text });
+          await ctx.reply(`✅ تم تحديث وقت ${label} إلى \`${text}\` بنجاح!`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[Markup.button.callback("🔙 رجوع", "hours_view")] ]).reply_markup });
+          clearState(userId);
+      } catch (e: any) {
+          console.error("Settings Update Error:", e);
+          await ctx.reply("❌ حدث خطأ أثناء الحفظ.");
       }
       return;
   }
@@ -795,6 +818,40 @@ bot.action("system_edit", (ctx) => {
     ctx.editMessageText("✏️ **تعديل التعليمات**\n\nابعتلي النص الجديد:", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
 });
 
+
+
+// --- Working Hours Handlers ---
+bot.action("hours_view", async (ctx) => {
+    try {
+        const res = await axios.get(`${config.apiBaseUrl}/settings`);
+        const { aiWorkStart, aiWorkEnd } = res.data.data || {};
+        const start = aiWorkStart || "غير محدد";
+        const end = aiWorkEnd || "غير محدد";
+
+        const msg = `🕰️ **ساعات العمل الحالية (توقيت مصر)**\n\n🟢 البداية: \`${start}\`\n🔴 النهاية: \`${end}\`\n\n⚠️ خارج هذه الأوقات، البوت لن يرد نهائياً (Silent Mode).`;
+
+        await ctx.editMessageText(msg, {
+            parse_mode: "Markdown",
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback("تعديل البداية 🟢", "hours_set_start"), Markup.button.callback("تعديل النهاية 🔴", "hours_set_end")],
+                [Markup.button.callback("🔙 رجوع", "menu_system")]
+            ])
+        });
+    } catch (e: any) {
+        console.error("Hours View Error:", e);
+        ctx.answerCbQuery("Error fetching settings");
+    }
+});
+
+bot.action("hours_set_start", (ctx) => {
+    setState(ctx.from!.id, { action: 'WAITING_SET_HOURS_START' });
+    ctx.editMessageText("🟢 **تعديل وقت البداية**\n\nدخل الوقت بصيغة 24 ساعة (مثال: `08:00`).", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+});
+
+bot.action("hours_set_end", (ctx) => {
+    setState(ctx.from!.id, { action: 'WAITING_SET_HOURS_END' });
+    ctx.editMessageText("🔴 **تعديل وقت النهاية**\n\nدخل الوقت بصيغة 24 ساعة (مثال: `23:00`).", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+});
 
 // --- FAQ Handlers ---
 bot.action(/faqs_list_(.+)/, async (ctx) => {

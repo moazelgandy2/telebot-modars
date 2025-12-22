@@ -12,6 +12,8 @@ export default function SettingsPage() {
     apiId: '',
     apiHash: '',
     stringSession: '',
+    aiWorkStart: '',
+    aiWorkEnd: '',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -25,6 +27,8 @@ export default function SettingsPage() {
             apiId: data.data.apiId || '',
             apiHash: data.data.apiHash || '',
             stringSession: data.data.stringSession || '',
+            aiWorkStart: data.data.aiWorkStart || '',
+            aiWorkEnd: data.data.aiWorkEnd || '',
           });
         }
       })
@@ -144,6 +148,37 @@ export default function SettingsPage() {
                         className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all"
                         style={{ direction: 'ltr' }}
                     />
+                </div>
+
+                {/* AI Working Hours */}
+                <div className="border-t border-border/40 pt-4 mt-2">
+                    <h3 className="text-sm font-semibold mb-3">🕒 ساعات العمل (توقيت مصر)</h3>
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground ml-1">بداية العمل</label>
+                            <Input
+                                name="aiWorkStart"
+                                value={settings.aiWorkStart}
+                                onChange={handleChange}
+                                placeholder="08:00"
+                                className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all"
+                                style={{ direction: 'ltr' }}
+                            />
+                            <p className="text-[10px] text-muted-foreground">صيغة 24 ساعة (مثال: 08:00)</p>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground ml-1">نهاية العمل</label>
+                            <Input
+                                name="aiWorkEnd"
+                                value={settings.aiWorkEnd}
+                                onChange={handleChange}
+                                placeholder="23:00"
+                                className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all"
+                                style={{ direction: 'ltr' }}
+                            />
+                            <p className="text-[10px] text-muted-foreground">صيغة 24 ساعة (مثال: 23:00)</p>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Actions Footer within Card */}

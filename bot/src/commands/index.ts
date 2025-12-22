@@ -298,6 +298,14 @@ export const setupCommands = (client: TelegramClient) => {
         const me = await client.getMe();
         if (sender.id.toString() === me.id.toString()) return;
 
+        // CHECK WORKING HOURS
+        const { isWithinWorkingHours } = await import("../utils/settings.js");
+        const isOpen = await isWithinWorkingHours();
+        if (!isOpen) {
+             console.log(`[Working Hours] Ignored message from ${userId} (Outside Working Hours).`);
+             return; // Silent Ignore
+        }
+
         // Debounce Logic
         const userIdStr = userId.toString();
         const existing = messageBuffers.get(userIdStr);
