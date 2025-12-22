@@ -44,7 +44,15 @@ export const setupCommands = (client: TelegramClient) => {
 
   client.addEventHandler(async (event: NewMessageEvent) => {
     if (!event.isPrivate) return;
-    if (event.message.out) return;
+    if (event.message.out) {
+        if (event.message.text) {
+             const chatId = event.chatId;
+             if (chatId) {
+                 await addToHistory(Number(chatId), "model", event.message.text);
+             }
+        }
+        return;
+    }
 
     const sender = await event.message.getSender();
     if (sender && 'bot' in sender && sender.bot) return;
