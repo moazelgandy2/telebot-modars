@@ -48,9 +48,79 @@ interface BufferState {
 }
 const messageBuffers = new Map<string, BufferState>();
 
+const userTyping = new Map<string, number>();
+
+const processAggregatedMessage = async (client: TelegramClient, userId: number, aggregatedText: string, latestEvent: NewMessageEvent) => {
+     messageBuffers.delete(userId.toString());
+
+     try {
+        const sender = await latestEvent.message.getSender();
+        if (!sender || !('id' in sender)) return;
+        const { name, username } = getSenderInfo(sender);
+
+        // NOTE: The "Wait Loop" is removed here because we now handle delay
+        // by resetting the timer in the typing event handler.
+
+        // Add aggregated text to history
+        await addToHistory(userId, "user", aggregatedText, username);
+
+        // Check Subscription
+        const isSubscribed = await checkSubscription(userId.toString());
+        const history = await getHistory(userId);
+
+        const response = await generateResponse(
+            history,
+            undefined,
+            async (intermediateMsg) => {},
+            isSubscribed,
+            userId.toString(),
+            async (emoji) => {
+                try {
+                    await client.invoke(new Api.messages.SendReaction({
+                        peer: sender,
+                        msgId: latestEvent.message.id,
+                        reaction: [new Api.ReactionEmoji({ emoticon: emoji })]
+                    }));
+                } catch(e) { console.error("Reaction failed:", e); }
+            }
+        );
+
+        if (response) {
+            await latestEvent.message.reply({ message: response });
+            await addToHistory(userId, "model", response, username);
+            await logConversation(userId, name, aggregatedText, response);
+        } else {
+            await addToHistory(userId, "model", "[Reaction Sent]", username);
+            await logConversation(userId, name, aggregatedText, "[Reaction Sent]");
+        }
+
+    } catch (error) {
+        console.error("Error processing aggregated text:", error);
+    }
+};
+
 export const setupCommands = (client: TelegramClient) => {
 
+  // Raw Event Handler for Typing Status
+  client.addEventHandler((update: any) => {
+      // Check for Private Chat Typing
+      if (update instanceof Api.UpdateUserTyping) {
+           const userId = update.userId.toString();
+           userTyping.set(userId, Date.now() + 6000); // 6s expiry
+
+           // EXTEND DEBOUNCE: If buffer exists, user is typing -> adding more text!
+           const buffer = messageBuffers.get(userId);
+           if (buffer) {
+               console.log(`[Typing] User ${userId} is typing. Extending wait...`);
+               clearTimeout(buffer.timer);
+               // Wait 2.5s from now (Assuming typing implies more text soon)
+               buffer.timer = setTimeout(() => processAggregatedMessage(client, Number(userId), buffer.text, buffer.event), 2500);
+           }
+      }
+  });
+
   client.addEventHandler(async (event: NewMessageEvent) => {
+    // ... (Existing NewMessage logic)
     if (!event.isPrivate) return;
     if (event.message.out) {
         if (event.message.text) {
@@ -222,62 +292,6 @@ export const setupCommands = (client: TelegramClient) => {
 
     // 3. Handle Text (With Debounce)
     if (text && !text.startsWith("/")) {
-        const processAggregatedMessage = async (userId: number, aggregatedText: string, latestEvent: NewMessageEvent) => {
-             // Remove from buffer
-             messageBuffers.delete(userId.toString());
-
-             try {
-                const sender = await latestEvent.message.getSender();
-                if (!sender || !('id' in sender)) return;
-                const { name, username } = getSenderInfo(sender);
-
-                // Add aggregated text to history
-                await addToHistory(userId, "user", aggregatedText, username);
-
-                // Check Subscription
-                const isSubscribed = await checkSubscription(userId.toString());
-                const history = await getHistory(userId);
-
-                const response = await generateResponse(
-                    history,
-                    undefined,
-                    async (intermediateMsg) => {
-                      /* Optional: could enable streaming token updates here if supported */
-                    },
-                    isSubscribed,
-                    userId.toString(),
-                    async (emoji) => {
-                        try {
-                           // Use inputPeer if possible or sender
-                           // client.invoke automatically handles casting often, but strictly:
-                           // peer needs to be InputPeer. 'sender' from getSender() is usually an Entity.
-                           // latestEvent.message.getInputChat() might be safer or latestEvent.getInputChat()
-                           // But passing 'sender' (Entity) usually works in gramjs high-level invoke wrappers?
-                           // Let's use latestEvent.message.chatId or similar.
-                           // Actually, 'sender' object works for 'peer'.
-                            await client.invoke(new Api.messages.SendReaction({
-                                peer: sender,
-                                msgId: latestEvent.message.id,
-                                reaction: [new Api.ReactionEmoji({ emoticon: emoji })]
-                            }));
-                        } catch(e) { console.error("Reaction failed:", e); }
-                    }
-                );
-
-                if (response) {
-                    await latestEvent.message.reply({ message: response });
-                    await addToHistory(userId, "model", response, username);
-                    await logConversation(userId, name, aggregatedText, response);
-                } else {
-                    await addToHistory(userId, "model", "[Reaction Sent]", username);
-                    await logConversation(userId, name, aggregatedText, "[Reaction Sent]");
-                }
-
-            } catch (error) {
-                console.error("Error processing aggregated text:", error);
-            }
-        };
-
         const sender = await message.getSender();
         if (!sender || !('id' in sender)) return;
         const userId = Number(sender.id);
@@ -288,14 +302,23 @@ export const setupCommands = (client: TelegramClient) => {
         const userIdStr = userId.toString();
         const existing = messageBuffers.get(userIdStr);
 
+        // Adaptive Debounce Strategy
+        const calculateDelay = (txt: string) => {
+            if (txt.length < 15) return 3500; // "Hello", "Hi", "Question" -> Wait 3.5s
+            if (txt.length < 50) return 2500; // Medium sentence -> Wait 2.5s
+            return 1500; // Long paragraph -> Wait 1.5s
+        };
+
         if (existing) {
             clearTimeout(existing.timer);
             const newText = existing.text + "\n" + text;
-            messageBuffers.set(userIdStr, {
-                text: newText,
-                event: event, // update event reference to latest
-                timer: setTimeout(() => processAggregatedMessage(userId, newText, event), 2000)
-            });
+            const delay = calculateDelay(newText);
+
+            // Just update buffer
+            existing.text = newText;
+            existing.event = event;
+            existing.timer = setTimeout(() => processAggregatedMessage(client, userId, newText, event), delay);
+
         } else {
             try {
                 await client.invoke(new Api.messages.SetTyping({
@@ -304,10 +327,11 @@ export const setupCommands = (client: TelegramClient) => {
                 }));
             } catch (e) { console.error("Typing status failed", e); }
 
+            const delay = calculateDelay(text);
             messageBuffers.set(userIdStr, {
                 text: text,
                 event: event,
-                timer: setTimeout(() => processAggregatedMessage(userId, text, event), 2000)
+                timer: setTimeout(() => processAggregatedMessage(client, userId, text, event), delay)
             });
         }
     }
