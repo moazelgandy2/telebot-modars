@@ -198,6 +198,29 @@ bot.action("cancel_action", (ctx) => {
 });
 
 // --- Generic Menus ---
+bot.action("menu_stats", async (ctx) => {
+    try {
+        const res = await axios.get(`${config.apiBaseUrl}/stats`);
+        if (res.data.success) {
+            const { total, active, expiring, expired, newSubsToday, messagesToday, activeUsersToday } = res.data.data;
+            const msg = `📊 **إحصائيات المنصة**\n━━━━━━━━━━━━━━━━\n\n` +
+                        `👥 **إجمالي المشتركين:** ${total}\n` +
+                        `✅ **اشتراكات نشطة:** ${active}\n` +
+                        `🆕 **جديد اليوم:** ${newSubsToday}\n\n` +
+                        `⚠️ **تنتهي قريباً (3 أيام):** ${expiring}\n` +
+                        `❌ **منتهية:** ${expired}\n\n` +
+                        `📈 **النشاط اليومي:**\n` +
+                        `💬 رسائل المساعد: ${messagesToday}\n` +
+                        `👤 طلاب متفاعلة اليوم: ${activeUsersToday}\n\n` +
+                        `_آخر تحديث: ${new Date().toLocaleTimeString('en-EG', {hour:'2-digit', minute:'2-digit', hour12: true})}_`;
+             await ctx.editMessageText(msg, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[BackToMainBtn]]).reply_markup });
+        }
+    } catch (e: any) {
+        console.error("Stats Error:", e);
+        const err = e.response?.data?.error || e.message || "Connection Error";
+        await ctx.answerCbQuery(`❌ Error: ${err}`);
+    }
+});
 bot.action("menu_users", (ctx) => ctx.editMessageText("👥 **إدارة المشتركين**", { parse_mode: "Markdown", ...UsersMenu }));
 bot.action("menu_system", (ctx) => ctx.editMessageText("📜 **تعليمات النظام**", { parse_mode: "Markdown", ...SystemMenu }));
 bot.action("menu_faqs", (ctx) => ctx.editMessageText("❓ **إدارة الأسئلة**", { parse_mode: "Markdown", ...FaqsMenu }));
