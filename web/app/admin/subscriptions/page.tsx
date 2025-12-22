@@ -264,21 +264,46 @@ export default function SubscriptionsPage() {
                             <TableBody>
                                 {subs.map((sub) => {
                                     const isActive = !sub.endDate || new Date(sub.endDate) > new Date();
+
+                                    // Relative Time Calculation
+                                    let timeBadge = null;
+                                    if (sub.endDate) {
+                                        const now = new Date();
+                                        const end = new Date(sub.endDate);
+                                        const diffTime = end.getTime() - now.getTime();
+                                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                                        if (diffDays > 0) {
+                                            timeBadge = <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full dark:bg-blue-900/30 dark:text-blue-400">{diffDays} days left</span>;
+                                        } else {
+                                            timeBadge = <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full dark:bg-orange-900/30 dark:text-orange-400">{Math.abs(diffDays)} days ago</span>;
+                                        }
+                                    }
+
                                     return (
                                     <TableRow key={sub.id}>
-                                        <TableCell className="font-mono text-xs">{sub.userId}</TableCell>
+                                        <TableCell className="font-mono text-xs">
+                                            <a href={`tg://user?id=${sub.userId}`} className="text-blue-600 hover:underline flex items-center gap-1">
+                                                {sub.userId} ↗
+                                            </a>
+                                        </TableCell>
                                         <TableCell>{sub.name || "-"}</TableCell>
                                         <TableCell>
-                                            <span className={cn(
-                                                "px-2 py-1 rounded-full text-xs font-medium",
-                                                isActive ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                                            )}>
-                                                {isActive ? "Active" : "Expired"}
-                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={cn(
+                                                    "px-2 py-1 rounded-full text-xs font-medium",
+                                                    isActive ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                                )}>
+                                                    {isActive ? "Active" : "Expired"}
+                                                </span>
+                                                {timeBadge}
+                                            </div>
                                         </TableCell>
-                                        <TableCell>{new Date(sub.startDate).toLocaleDateString()}</TableCell>
-                                        <TableCell>
-                                            {sub.endDate ? new Date(sub.endDate).toLocaleDateString() : <span className="text-muted-foreground italic">Lifetime</span>}
+                                        <TableCell className="text-right">
+                                            {new Date(sub.startDate).toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' })}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            {sub.endDate ? new Date(sub.endDate).toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' }) : <span className="text-muted-foreground italic">Lifetime</span>}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="destructive" size="sm" onClick={() => handleDelete(sub.userId)}>

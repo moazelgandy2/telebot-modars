@@ -412,22 +412,32 @@ bot.on("text", async (ctx) => {
   }
   if (state.action === 'WAITING_ADD_USER_NAME') {
       setState(userId, { action: 'WAITING_ADD_USER_START_DATE', tempData: { ...state.tempData, name: text } });
-      await ctx.reply(`✅ الاسم: ${text}\n\n📅 **(خطوة 3/3)** دخل تاريخ البداية (YYYY-MM-DD):\nأو اكتب "now" عشان يبدأ من النهاردة.`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+      await ctx.reply(`✅ الاسم: ${text}\n\n📅 **(خطوة 3/3)** دخل تاريخ البداية (DD-MM-YYYY):\nأو اكتب "now" عشان يبدأ من النهاردة.`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
       return;
   }
   if (state.action === 'WAITING_ADD_USER_START_DATE') {
       let startDate = new Date();
       if (text.toLowerCase() !== 'now') {
-          const parsed = new Date(text);
-          if (isNaN(parsed.getTime())) {
-               await ctx.reply("⚠️ تاريخ غير صحيح. حاول تاني (YYYY-MM-DD) أو اكتب now.");
+          // Parse DD-MM-YYYY or DD/MM/YYYY
+          const parts = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+          if (parts) {
+              const day = parseInt(parts[1], 10);
+              const month = parseInt(parts[2], 10) - 1; // Months are 0-indexed
+              const year = parseInt(parts[3], 10);
+              startDate = new Date(year, month, day);
+          } else {
+               await ctx.reply("⚠️ تاريخ غير صحيح. حاول تاني بصيغة (DD-MM-YYYY) مثلاً 25-12-2025 أو اكتب now.");
                return;
           }
-          startDate = parsed;
+
+          if (isNaN(startDate.getTime())) {
+               await ctx.reply("⚠️ تاريخ غير صحيح. تأكد من الأرقام.");
+               return;
+          }
       }
 
       setState(userId, { action: 'WAITING_ADD_USER_DURATION', tempData: { ...state.tempData, startDate } });
-      await ctx.reply(`✅ البداية: ${startDate.toLocaleDateString()}\n\n⏳ **(خطوة 4/4)** دخل مدة الاشتراك بالأيام (مثلاً 30):`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+      await ctx.reply(`✅ البداية: ${startDate.toLocaleDateString('en-GB')}\n\n⏳ **(خطوة 4/4)** دخل مدة الاشتراك بالأيام (مثلاً 30):`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
       return;
   }
   if (state.action === 'WAITING_ADD_USER_DURATION') {
@@ -448,7 +458,8 @@ bot.on("text", async (ctx) => {
             startDate: startDate.toISOString(),
             endDate: endDate.toISOString()
         });
-        await ctx.reply(`🎉 **تمت الإضافة بنجاح!**\n⏳ المدة: ${days} يوم\n📅 من: ${startDate.toLocaleDateString()}\n📅 لغاية: ${endDate.toLocaleDateString()}`, { parse_mode: "Markdown", ...UsersMenu });
+        const dateOpt: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        await ctx.reply(`🎉 **تمت الإضافة بنجاح!**\n⏳ المدة: ${days} يوم\n📅 من: ${startDate.toLocaleDateString('ar-EG', dateOpt)}\n📅 لغاية: ${endDate.toLocaleDateString('ar-EG', dateOpt)}`, { parse_mode: "Markdown", ...UsersMenu });
         clearState(userId);
       } catch (e) { await ctx.reply("❌ Error"); }
       return;
@@ -464,12 +475,21 @@ bot.on("text", async (ctx) => {
   // --- Edit User Text Handlers ---
   if (state.action === 'WAITING_EDIT_USER_START_DATE') {
       if (text.toLowerCase() !== 'keep') {
-          const parsed = new Date(text);
-          if (isNaN(parsed.getTime())) {
-               await ctx.reply("⚠️ تاريخ غير صحيح. حاول تاني (YYYY-MM-DD) أو اكتب keep.");
+          const parts = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+          if (parts) {
+              const day = parseInt(parts[1], 10);
+              const month = parseInt(parts[2], 10) - 1;
+              const year = parseInt(parts[3], 10);
+              state.tempData.startDate = new Date(year, month, day);
+          } else {
+               await ctx.reply("⚠️ تاريخ غير صحيح. حاول تاني بصيغة (DD-MM-YYYY) مثلاً 01-01-2025 أو اكتب keep.");
                return;
           }
-          state.tempData.startDate = parsed;
+
+          if (isNaN(state.tempData.startDate.getTime())) {
+               await ctx.reply("⚠️ تاريخ غير صحيح. تأكد من الأرقام.");
+               return;
+          }
       }
       setState(userId, { action: 'WAITING_EDIT_USER_DURATION', tempData: state.tempData });
       await ctx.reply(`✅ تمام.\n\n⏳ **دخل المدة الجديدة (أيام):**\nأو اكتب "keep" عشان متغيرش تاريخ الانتهاء الحالي.`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
@@ -582,11 +602,26 @@ bot.action(/users_list_(.+)/, async (ctx) => {
                 const isActive = startDate <= now && (!endDate || endDate >= now);
                 const status = isActive ? "✅ نشط" : "🔴 منتهي";
 
-                msg += `👤 **${u.name || "مجهول"}**\n`;
+                // Calculate remaining or elapsed days
+                let timeInfo = "";
+                if (endDate) {
+                    const diffTime = endDate.getTime() - now.getTime();
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    if (diffDays > 0) {
+                        timeInfo = `⏳ باقي: ${diffDays} يوم`;
+                    } else {
+                        timeInfo = `⚠️ انتهى من: ${Math.abs(diffDays)} يوم`;
+                    }
+                } else {
+                    timeInfo = "♾️ اشتراك دائم";
+                }
+
+                msg += `👤 [${u.name || "مجهول"}](tg://user?id=${u.userId})\n`;
                 msg += `🆔 \`${u.userId}\`\n`;
                 msg += `📊 الحالة: ${status}\n`;
-                msg += `📅 البداية: ${startDate.toLocaleDateString()}\n`;
-                msg += `⏳ النهاية: ${endDate ? endDate.toLocaleDateString() : "♾️ مدى الحياة"}\n`;
+                msg += `${timeInfo}\n`;
+                msg += `📅 البداية: ${startDate.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n`;
+                msg += `⏳ النهاية: ${endDate ? endDate.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : "♾️ مدى الحياة"}\n`;
                 msg += `〰️〰️〰️\n`;
             });
 
@@ -739,7 +774,7 @@ bot.action(/users_edit_list_(.+)/, async (ctx) => {
 bot.action(/user_select_edit_(.+)/, async (ctx) => {
     const userId = ctx.match[1];
     setState(ctx.from!.id, { action: 'WAITING_EDIT_USER_START_DATE', tempData: { id: userId } });
-    await ctx.editMessageText(`📅 **تعديل تاريخ الاشتراك**\n🆔 \`${userId}\`\n\nدخل تاريخ البداية الجديد (YYYY-MM-DD):\nأو اكتب "keep" عشان متغيروش.`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+    await ctx.editMessageText(`📅 **تعديل تاريخ الاشتراك**\n🆔 \`${userId}\`\n\nدخل تاريخ البداية الجديد (DD-MM-YYYY):\nأو اكتب "keep" عشان متغيروش.`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
 });
 
 
