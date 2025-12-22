@@ -27,6 +27,8 @@ interface Subscription {
     userId: string;
     name: string | null;
     createdAt: string;
+    startDate: string;
+    endDate: string | null;
 }
 
 interface ChatSession {
@@ -253,23 +255,39 @@ export default function SubscriptionsPage() {
                                 <TableRow>
                                     <TableHead>User ID</TableHead>
                                     <TableHead>Name</TableHead>
-                                    <TableHead>Created At</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Start Date</TableHead>
+                                    <TableHead>End Date</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {subs.map((sub) => (
+                                {subs.map((sub) => {
+                                    const isActive = !sub.endDate || new Date(sub.endDate) > new Date();
+                                    return (
                                     <TableRow key={sub.id}>
-                                        <TableCell>{sub.userId}</TableCell>
+                                        <TableCell className="font-mono text-xs">{sub.userId}</TableCell>
                                         <TableCell>{sub.name || "-"}</TableCell>
-                                        <TableCell>{new Date(sub.createdAt).toLocaleDateString()}</TableCell>
+                                        <TableCell>
+                                            <span className={cn(
+                                                "px-2 py-1 rounded-full text-xs font-medium",
+                                                isActive ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                            )}>
+                                                {isActive ? "Active" : "Expired"}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell>{new Date(sub.startDate).toLocaleDateString()}</TableCell>
+                                        <TableCell>
+                                            {sub.endDate ? new Date(sub.endDate).toLocaleDateString() : <span className="text-muted-foreground italic">Lifetime</span>}
+                                        </TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="destructive" size="sm" onClick={() => handleDelete(sub.userId)}>
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
                                         </TableCell>
                                     </TableRow>
-                                ))}
+                                    );
+                                })}
                                 {subs.length === 0 && !loading && (
                                     <TableRow>
                                         <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">No subscriptions found</TableCell>

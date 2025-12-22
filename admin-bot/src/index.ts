@@ -576,7 +576,18 @@ bot.action(/users_list_(.+)/, async (ctx) => {
 
             let msg = `👥 **قائمة المشتركين (${users.length})**\nصفحة ${current + 1} من ${maxPage + 1}\n━━━━━━━━━━━━━━━━\n`;
             chunk.forEach((u: any) => {
-                msg += `👤 **${u.name || "مجهول"}**\n🆔 \`${u.userId}\`\n📅 ${new Date(u.createdAt).toLocaleDateString()}\n〰️〰️〰️\n`;
+                const now = new Date();
+                const startDate = new Date(u.startDate);
+                const endDate = u.endDate ? new Date(u.endDate) : null;
+                const isActive = startDate <= now && (!endDate || endDate >= now);
+                const status = isActive ? "✅ نشط" : "🔴 منتهي";
+
+                msg += `👤 **${u.name || "مجهول"}**\n`;
+                msg += `🆔 \`${u.userId}\`\n`;
+                msg += `📊 الحالة: ${status}\n`;
+                msg += `📅 البداية: ${startDate.toLocaleDateString()}\n`;
+                msg += `⏳ النهاية: ${endDate ? endDate.toLocaleDateString() : "♾️ مدى الحياة"}\n`;
+                msg += `〰️〰️〰️\n`;
             });
 
             const buttons = [];

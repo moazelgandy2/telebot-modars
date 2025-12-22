@@ -40,6 +40,14 @@ const checkSubscription = async (userId: string): Promise<boolean> => {
     }
 };
 
+// Message Buffer Types
+interface BufferState {
+  text: string;
+  timer: NodeJS.Timeout;
+  event: NewMessageEvent; // Keep last event to reply to
+}
+const messageBuffers = new Map<string, BufferState>();
+
 export const setupCommands = (client: TelegramClient) => {
 
   client.addEventHandler(async (event: NewMessageEvent) => {
@@ -196,47 +204,73 @@ export const setupCommands = (client: TelegramClient) => {
       return;
     }
 
-    // 3. Handle Text
+    // 3. Handle Text (With Debounce)
     if (text && !text.startsWith("/")) {
-        try {
-            const sender = await message.getSender();
-            if (!sender || !('id' in sender)) return;
+        const processAggregatedMessage = async (userId: number, aggregatedText: string, latestEvent: NewMessageEvent) => {
+             // Remove from buffer
+             messageBuffers.delete(userId.toString());
 
-            const userId = Number(sender.id);
-            const { name, username } = getSenderInfo(sender);
+             try {
+                const sender = await latestEvent.message.getSender();
+                if (!sender || !('id' in sender)) return;
+                const { name, username } = getSenderInfo(sender);
 
-            const me = await client.getMe();
-            if (sender.id.toString() === me.id.toString()) return;
+                // Add aggregated text to history
+                await addToHistory(userId, "user", aggregatedText, username);
 
-            await addToHistory(userId, "user", text, username);
+                // Check Subscription
+                const isSubscribed = await checkSubscription(userId.toString());
+                const history = await getHistory(userId);
 
-            // Check Subscription
-            const isSubscribed = await checkSubscription(userId.toString());
+                const response = await generateResponse(
+                    history,
+                    undefined,
+                    async (intermediateMsg) => {
+                      /* Optional: could enable streaming token updates here if supported */
+                    },
+                    isSubscribed,
+                    userId.toString()
+                );
 
-            const history = await getHistory(userId);
+                await latestEvent.message.reply({ message: response });
+                await addToHistory(userId, "model", response, username);
 
-            const response = await generateResponse(
-                history,
-                undefined,
-                async (intermediateMsg) => {
-                  await message.reply({ message: intermediateMsg });
-                },
-                isSubscribed,
-                userId.toString()
-            );
+                 await logConversation(
+                    userId,
+                    name,
+                    aggregatedText,
+                    response
+                );
 
-            await message.reply({ message: response });
-            await addToHistory(userId, "model", response, username);
+            } catch (error) {
+                console.error("Error processing aggregated text:", error);
+            }
+        };
 
-             await logConversation(
-                userId,
-                name,
-                text,
-                response
-            );
+        const sender = await message.getSender();
+        if (!sender || !('id' in sender)) return;
+        const userId = Number(sender.id);
+        const me = await client.getMe();
+        if (sender.id.toString() === me.id.toString()) return;
 
-        } catch (error) {
-            console.error("Error processing text:", error);
+        // Debounce Logic
+        const userIdStr = userId.toString();
+        const existing = messageBuffers.get(userIdStr);
+
+        if (existing) {
+            clearTimeout(existing.timer);
+            const newText = existing.text + "\n" + text;
+            messageBuffers.set(userIdStr, {
+                text: newText,
+                event: event, // update event reference to latest
+                timer: setTimeout(() => processAggregatedMessage(userId, newText, event), 2000)
+            });
+        } else {
+            messageBuffers.set(userIdStr, {
+                text: text,
+                event: event,
+                timer: setTimeout(() => processAggregatedMessage(userId, text, event), 2000)
+            });
         }
     }
 
