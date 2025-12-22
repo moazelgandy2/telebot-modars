@@ -139,7 +139,7 @@ export const generateResponse = async (
           return null;
         }).filter(Boolean);
         if (content.length === 0) return null;
-        return { role: msg.role === "model" ? "assistant" : "user", content: content };
+        return { role: (msg.role === "model" || msg.role === "assistant") ? "assistant" : "user", content: content };
     }).filter(Boolean),
   ];
 

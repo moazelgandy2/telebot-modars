@@ -1,7 +1,7 @@
 import { config } from "../config.js";
 
 export interface ChatMessage {
-  role: "user" | "model";
+  role: "user" | "model" | "assistant";
   parts: { text: string; image_url?: { url: string } }[];
 }
 
@@ -45,7 +45,7 @@ export const getHistory = async (userId: number): Promise<ChatMessage[]> => {
       if (parts.length === 0) parts.push({ text: "" });
 
       return {
-        role: msg.role === "user" ? "user" : "model",
+        role: msg.role === "user" ? "user" : (msg.role === "assistant" ? "assistant" : "model"),
         parts: parts,
       };
     });
@@ -57,7 +57,7 @@ export const getHistory = async (userId: number): Promise<ChatMessage[]> => {
 
 export const addToHistory = async (
   userId: number,
-  role: "user" | "model",
+  role: "user" | "model" | "assistant",
   text: string,
   username?: string,
   attachments?: { url: string; type: string }[]

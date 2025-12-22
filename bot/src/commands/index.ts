@@ -126,7 +126,7 @@ export const setupCommands = (client: TelegramClient) => {
         if (event.message.text) {
              const chatId = event.chatId;
              if (chatId) {
-                 await addToHistory(Number(chatId), "model", event.message.text);
+                 await addToHistory(Number(chatId), "assistant", event.message.text);
              }
         }
         return;
