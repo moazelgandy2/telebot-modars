@@ -41,14 +41,14 @@ const checkSubscription = async (userId: string): Promise<boolean> => {
 };
 
 export const setupCommands = (client: TelegramClient) => {
-  // Handle new messages (Text & Photo)
+
   client.addEventHandler(async (event: NewMessageEvent) => {
+    if (!event.isPrivate) return;
     const message = event.message;
-    // Determine if it's text or photo or both
+
     const text = message.text;
     const isPhoto = !!message.media && message.media instanceof Api.MessageMediaPhoto;
 
-    // 1. Check for commands if it's a text message
     if (text === "/start") {
         const sender = await message.getSender();
         if (sender && 'id' in sender) {
