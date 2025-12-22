@@ -224,7 +224,11 @@ bot.action("admins_list", async (ctx) => {
             } else { msg += "(مفيش آدمنز إضافيين)"; }
             await ctx.editMessageText(msg, { parse_mode: "Markdown", ...AdminsMenu });
         }
-    } catch (e) { await ctx.answerCbQuery("Error"); }
+    } catch (e: any) {
+        console.error("Error:", e);
+        const err = e.response?.data?.error || e.message || "Unknown Error";
+        await ctx.answerCbQuery(`❌ Error: ${err}`, { show_alert: true });
+    }
 });
 
 // 2. ADD (Wizard)
@@ -386,7 +390,10 @@ bot.on("text", async (ctx) => {
                 setState(userId, { action: 'WAITING_EDIT_ADMIN_SELECT', tempData: { admin: target } });
                 await ctx.reply(`⚙️ **تعديل الأدمن:** ${target.name}`, { parse_mode: "Markdown", ...getEditAdminMenu(target) });
             } else { await ctx.reply("❌ الآيدي ده مش موجود."); }
-        } catch(e) { await ctx.reply("Error"); }
+        } catch(e: any) {
+            console.error(e);
+            await ctx.reply(`❌ **خطأ:** ${e.message}`);
+        }
         return;
     }
     if (state.action === 'WAITING_EDIT_ADMIN_NAME') {
@@ -461,7 +468,11 @@ bot.on("text", async (ctx) => {
         const dateOpt: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
         await ctx.reply(`🎉 **تمت الإضافة بنجاح!**\n⏳ المدة: ${days} يوم\n📅 من: ${startDate.toLocaleDateString('ar-EG', dateOpt)}\n📅 لغاية: ${endDate.toLocaleDateString('ar-EG', dateOpt)}`, { parse_mode: "Markdown", ...UsersMenu });
         clearState(userId);
-      } catch (e) { await ctx.reply("❌ Error"); }
+      } catch (e: any) {
+        console.error("Error:", e);
+        const err = e.response?.data?.error || e.message || "Unknown Error";
+        await ctx.reply(`❌ **حدث خطأ:**\n\`${err}\``, { parse_mode: "Markdown" });
+      }
       return;
   }
   if (state.action === 'WAITING_DEL_USER') {
@@ -469,7 +480,11 @@ bot.on("text", async (ctx) => {
         await axios.delete(`${config.apiBaseUrl}/subscription`, { params: { userId: text } });
         await ctx.reply(`🗑️ تم الحذف.`, { ...UsersMenu });
         clearState(userId);
-      } catch (e) { await ctx.reply("❌ Error"); }
+      } catch (e: any) {
+        console.error("Error:", e);
+        const err = e.response?.data?.error || e.message || "Unknown Error";
+        await ctx.reply(`❌ **حدث خطأ:**\n\`${err}\``, { parse_mode: "Markdown" });
+      }
       return;
   }
   // --- Edit User Text Handlers ---
@@ -547,7 +562,11 @@ bot.on("text", async (ctx) => {
         await axios.patch(`${config.apiBaseUrl}/subscription`, payload);
         await ctx.reply(`✅ **تم التعديل بنجاح!**`, { parse_mode: "Markdown", ...UsersMenu });
         clearState(userId);
-      } catch (e) { await ctx.reply("❌ Error"); }
+      } catch (e: any) {
+        console.error("Error:", e);
+        const err = e.response?.data?.error || e.message || "Unknown Error";
+        await ctx.reply(`❌ **حدث خطأ:**\n\`${err}\``, { parse_mode: "Markdown" });
+      }
       return;
   }
   if (state.action === 'WAITING_ADD_FAQ_Q') {
@@ -560,7 +579,11 @@ bot.on("text", async (ctx) => {
         await axios.post(`${config.apiBaseUrl}/faqs`, { question: state.tempData.q, answer: text });
         await ctx.reply(`🎉 **تم حفظ السؤال!**`, { ...FaqsMenu });
         clearState(userId);
-      } catch (e) { await ctx.reply("❌ Error"); }
+      } catch (e: any) {
+        console.error("Error:", e);
+        const err = e.response?.data?.error || e.message || "Unknown Error";
+        await ctx.reply(`❌ **حدث خطأ:**\n\`${err}\``, { parse_mode: "Markdown" });
+      }
       return;
   }
   if (state.action === 'WAITING_DEL_FAQ') {
@@ -568,7 +591,11 @@ bot.on("text", async (ctx) => {
         await axios.delete(`${config.apiBaseUrl}/faqs`, { params: { id: text } });
         await ctx.reply(`🗑️ تم الحذف.`, { ...FaqsMenu });
         clearState(userId);
-      } catch (e) { await ctx.reply("❌ Error"); }
+      } catch (e: any) {
+        console.error("Error:", e);
+        const err = e.response?.data?.error || e.message || "Unknown Error";
+        await ctx.reply(`❌ **حدث خطأ:**\n\`${err}\``, { parse_mode: "Markdown" });
+      }
       return;
   }
   if (state.action === 'WAITING_SET_SYSTEM') {
@@ -576,7 +603,11 @@ bot.on("text", async (ctx) => {
         await axios.post(`${config.apiBaseUrl}/system-instruction`, { content: text });
         await ctx.reply("✅ تم التحديث.", { ...SystemMenu });
         clearState(userId);
-      } catch (e) { await ctx.reply("❌ Error"); }
+      } catch (e: any) {
+        console.error("Error:", e);
+        const err = e.response?.data?.error || e.message || "Unknown Error";
+        await ctx.reply(`❌ **حدث خطأ:**\n\`${err}\``, { parse_mode: "Markdown" });
+      }
       return;
   }
 });
@@ -631,7 +662,11 @@ bot.action(/users_list_(.+)/, async (ctx) => {
 
             await ctx.editMessageText(msg, { parse_mode: "Markdown", ...Markup.inlineKeyboard([buttons, [BackToMainBtn]]) });
         }
-    } catch (e) { await ctx.answerCbQuery("Error"); }
+    } catch (e: any) {
+        console.error("Error:", e);
+        const err = e.response?.data?.error || e.message || "Unknown Error";
+        await ctx.answerCbQuery(`❌ Error: ${err}`, { show_alert: true });
+    }
 });
 
 bot.action("users_add_start", (ctx) => {
@@ -666,12 +701,29 @@ bot.action(/users_del_list_(.+)/, async (ctx) => {
 
             await ctx.editMessageText(`🗑️ **اختار المشترك لحذفه:**\nصفحة ${current + 1} من ${maxPage + 1}`, { parse_mode: "Markdown", ...Markup.inlineKeyboard(buttons) });
         }
-    } catch (e) { await ctx.answerCbQuery("Error"); }
+    } catch (e: any) {
+        console.error("Error:", e);
+        const err = e.response?.data?.error || e.message || "Unknown Error";
+        await ctx.answerCbQuery(`❌ Error: ${err}`, { show_alert: true });
+    }
 });
 
-bot.action(/user_select_del_(.+)/, (ctx) => {
+bot.action(/user_select_del_(.+)/, async (ctx) => {
     const userId = ctx.match[1];
-    ctx.editMessageText(`⚠️ **متأكد إنك عايز تحذف المشترك ده؟**\n🆔 \`${userId}\``, {
+    let details = "";
+    try {
+        const res = await axios.get(`${config.apiBaseUrl}/subscription?userId=${userId}`);
+        if(res.data.success && res.data.data) {
+            const u = res.data.data;
+            const startDate = new Date(u.startDate);
+            const endDate = u.endDate ? new Date(u.endDate) : null;
+            details += `\n👤 الاسم: ${u.name || "مجهول"}`;
+            details += `\n📅 البداية: ${startDate.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+            details += `\n⏳ النهاية: ${endDate ? endDate.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' }) : "مدى الحياة"}`;
+        }
+    } catch(e) {}
+
+    await ctx.editMessageText(`⚠️ **متأكد إنك عايز تحذف المشترك ده؟**\n🆔 \`${userId}\`${details}`, {
         parse_mode: "Markdown",
         ...Markup.inlineKeyboard([
             [Markup.button.callback("✅ نعم، احذف", `user_confirm_del_${userId}`)],
@@ -684,7 +736,11 @@ bot.action(/user_confirm_del_(.+)/, async (ctx) => {
     try {
         await axios.delete(`${config.apiBaseUrl}/subscription`, { params: { userId } });
         await ctx.editMessageText("🗑️ **تم حذف المشترك بنجاح.**", { parse_mode: "Markdown", ...UsersMenu });
-    } catch (e) { await ctx.answerCbQuery("Error"); }
+    } catch (e: any) {
+        console.error("Error:", e);
+        const err = e.response?.data?.error || e.message || "Unknown Error";
+        await ctx.answerCbQuery(`❌ Error: ${err}`, { show_alert: true });
+    }
 });
 
 
@@ -741,7 +797,11 @@ bot.action(/faqs_list_(.+)/, async (ctx) => {
 
             await ctx.editMessageText(msg, { parse_mode: "Markdown", ...Markup.inlineKeyboard([buttons, [BackToMainBtn]]) });
         }
-    } catch (e) { await ctx.answerCbQuery("Error"); }
+    } catch (e: any) {
+        console.error("Error:", e);
+        const err = e.response?.data?.error || e.message || "Unknown Error";
+        await ctx.answerCbQuery(`❌ Error: ${err}`, { show_alert: true });
+    }
 });
 
 // --- Edit Users Handlers ---
@@ -757,7 +817,26 @@ bot.action(/users_edit_list_(.+)/, async (ctx) => {
             const start = current * perPage;
             const chunk = users.slice(start, start + perPage);
 
-            const buttons = chunk.map((u:any) => [Markup.button.callback(`✏️ ${u.name || "مجهول"}`, `user_select_edit_${u.userId}`)]);
+            let msg = `✏️ **اختار المشترك لتعديل اشتراكه:**\nصفحة ${current + 1} من ${maxPage + 1}\n━━━━━━━━━━━━━━━━\n`;
+
+            // Build the buttons
+            const buttons = [];
+
+            chunk.forEach((u: any) => {
+                const now = new Date();
+                const startDate = new Date(u.startDate);
+                const endDate = u.endDate ? new Date(u.endDate) : null;
+                const isActive = startDate <= now && (!endDate || endDate >= now);
+                const status = isActive ? "✅" : "🔴";
+
+                // Add details to message
+                msg += `👤 **${u.name || "مجهول"}** (${status})\n`;
+                msg += `🆔 \`${u.userId}\`\n`;
+                msg += `📅 ${startDate.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' })} ➡️ ${endDate ? endDate.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' }) : "مدى الحياة"}\n`;
+                msg += `〰️〰️〰️\n`;
+
+                buttons.push([Markup.button.callback(`✏️ ${u.name || "مجهول"} (${u.userId})`, `user_select_edit_${u.userId}`)]);
+            });
 
             const navButtons = [];
             if (current > 0) navButtons.push(Markup.button.callback("⬅️ سابق", `users_edit_list_${current - 1}`));
@@ -766,15 +845,36 @@ bot.action(/users_edit_list_(.+)/, async (ctx) => {
 
             buttons.push([CancelBtn]);
 
-            await ctx.editMessageText(`✏️ **اختار المشترك لتعديل اشتراكه:**\nصفحة ${current + 1} من ${maxPage + 1}`, { parse_mode: "Markdown", ...Markup.inlineKeyboard(buttons) });
+            await ctx.editMessageText(msg, { parse_mode: "Markdown", ...Markup.inlineKeyboard(buttons) });
         }
-    } catch (e) { await ctx.answerCbQuery("Error"); }
+    } catch (e: any) {
+        console.error("Error:", e);
+        const err = e.response?.data?.error || e.message || "Unknown Error";
+        await ctx.answerCbQuery(`❌ Error: ${err}`, { show_alert: true });
+    }
 });
 
 bot.action(/user_select_edit_(.+)/, async (ctx) => {
     const userId = ctx.match[1];
-    setState(ctx.from!.id, { action: 'WAITING_EDIT_USER_START_DATE', tempData: { id: userId } });
-    await ctx.editMessageText(`📅 **تعديل تاريخ الاشتراك**\n🆔 \`${userId}\`\n\nدخل تاريخ البداية الجديد (DD-MM-YYYY):\nأو اكتب "keep" عشان متغيروش.`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+    try {
+        const res = await axios.get(`${config.apiBaseUrl}/subscription?userId=${userId}`);
+        let userInfoMsg = "";
+        if (res.data.success && res.data.data) {
+             const u = res.data.data;
+             const startDate = new Date(u.startDate);
+             const endDate = u.endDate ? new Date(u.endDate) : null;
+
+             userInfoMsg += `\n👤 المشترك: ${u.name || "مجهول"}`;
+             userInfoMsg += `\n📅 البداية الحالية: ${startDate.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+             userInfoMsg += `\n⏳ النهاية الحالية: ${endDate ? endDate.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' }) : "مدى الحياة"}`;
+        }
+
+        setState(ctx.from!.id, { action: 'WAITING_EDIT_USER_START_DATE', tempData: { id: userId } });
+        await ctx.editMessageText(`📅 **تعديل تاريخ الاشتراك**\n🆔 \`${userId}\`${userInfoMsg}\n\nدخل تاريخ البداية الجديد (DD-MM-YYYY):\nأو اكتب "keep" عشان متغيروش.`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+    } catch (e) {
+        setState(ctx.from!.id, { action: 'WAITING_EDIT_USER_START_DATE', tempData: { id: userId } });
+        await ctx.editMessageText(`📅 **تعديل تاريخ الاشتراك**\n🆔 \`${userId}\`\n\nدخل تاريخ البداية الجديد (DD-MM-YYYY):\nأو اكتب "keep" عشان متغيروش.`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+    }
 });
 
 
