@@ -28,8 +28,8 @@ interface AdminUser {
 
 interface UserState {
   action?:
-    | 'WAITING_ADD_USER_ID' | 'WAITING_ADD_USER_NAME'
-    | 'WAITING_DEL_USER'
+    | 'WAITING_ADD_USER_ID' | 'WAITING_ADD_USER_NAME' | 'WAITING_ADD_USER_START_DATE' | 'WAITING_ADD_USER_DURATION'
+    | 'WAITING_DEL_USER' | 'WAITING_EDIT_USER_START_DATE' | 'WAITING_EDIT_USER_DURATION'
     | 'WAITING_SET_SYSTEM'
     | 'WAITING_ADD_FAQ_Q' | 'WAITING_ADD_FAQ_A'
     | 'WAITING_DEL_FAQ'
@@ -150,7 +150,8 @@ const getMainMenu = (admin: AdminUser) => {
 // Define constants here so they are available globally
 const UsersMenu = Markup.inlineKeyboard([
   [Markup.button.callback("عرض القائمة 📃", "users_list_0")],
-  [Markup.button.callback("➕ إضافة مشترك", "users_add_start"), Markup.button.callback("❌ حذف مشترك", "users_del_list_0")],
+  [Markup.button.callback("➕ إضافة مشترك", "users_add_start"), Markup.button.callback("✏️ تعديل مشترك", "users_edit_list_0")],
+  [Markup.button.callback("❌ حذف مشترك", "users_del_list_0")],
   [BackToMainBtn]
 ]);
 
@@ -410,9 +411,44 @@ bot.on("text", async (ctx) => {
       return;
   }
   if (state.action === 'WAITING_ADD_USER_NAME') {
+      setState(userId, { action: 'WAITING_ADD_USER_START_DATE', tempData: { ...state.tempData, name: text } });
+      await ctx.reply(`✅ الاسم: ${text}\n\n📅 **(خطوة 3/3)** دخل تاريخ البداية (YYYY-MM-DD):\nأو اكتب "now" عشان يبدأ من النهاردة.`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+      return;
+  }
+  if (state.action === 'WAITING_ADD_USER_START_DATE') {
+      let startDate = new Date();
+      if (text.toLowerCase() !== 'now') {
+          const parsed = new Date(text);
+          if (isNaN(parsed.getTime())) {
+               await ctx.reply("⚠️ تاريخ غير صحيح. حاول تاني (YYYY-MM-DD) أو اكتب now.");
+               return;
+          }
+          startDate = parsed;
+      }
+
+      setState(userId, { action: 'WAITING_ADD_USER_DURATION', tempData: { ...state.tempData, startDate } });
+      await ctx.reply(`✅ البداية: ${startDate.toLocaleDateString()}\n\n⏳ **(خطوة 4/4)** دخل مدة الاشتراك بالأيام (مثلاً 30):`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+      return;
+  }
+  if (state.action === 'WAITING_ADD_USER_DURATION') {
+      const days = parseInt(text);
+      if (isNaN(days) || days <= 0) {
+          await ctx.reply("⚠️ رقم غير صحيح. دخل رقم صحيح (أكبر من 0).");
+          return;
+      }
+
+      const startDate = state.tempData.startDate || new Date();
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + days);
+
       try {
-        await axios.post(`${config.apiBaseUrl}/subscription`, { userId: state.tempData.id, name: text });
-        await ctx.reply(`🎉 **تمت الإضافة بنجاح!**`, { parse_mode: "Markdown", ...UsersMenu });
+        await axios.post(`${config.apiBaseUrl}/subscription`, {
+            userId: state.tempData.id,
+            name: state.tempData.name,
+            startDate: startDate.toISOString(),
+            endDate: endDate.toISOString()
+        });
+        await ctx.reply(`🎉 **تمت الإضافة بنجاح!**\n⏳ المدة: ${days} يوم\n📅 من: ${startDate.toLocaleDateString()}\n📅 لغاية: ${endDate.toLocaleDateString()}`, { parse_mode: "Markdown", ...UsersMenu });
         clearState(userId);
       } catch (e) { await ctx.reply("❌ Error"); }
       return;
@@ -421,6 +457,75 @@ bot.on("text", async (ctx) => {
       try {
         await axios.delete(`${config.apiBaseUrl}/subscription`, { params: { userId: text } });
         await ctx.reply(`🗑️ تم الحذف.`, { ...UsersMenu });
+        clearState(userId);
+      } catch (e) { await ctx.reply("❌ Error"); }
+      return;
+  }
+  // --- Edit User Text Handlers ---
+  if (state.action === 'WAITING_EDIT_USER_START_DATE') {
+      if (text.toLowerCase() !== 'keep') {
+          const parsed = new Date(text);
+          if (isNaN(parsed.getTime())) {
+               await ctx.reply("⚠️ تاريخ غير صحيح. حاول تاني (YYYY-MM-DD) أو اكتب keep.");
+               return;
+          }
+          state.tempData.startDate = parsed;
+      }
+      setState(userId, { action: 'WAITING_EDIT_USER_DURATION', tempData: state.tempData });
+      await ctx.reply(`✅ تمام.\n\n⏳ **دخل المدة الجديدة (أيام):**\nأو اكتب "keep" عشان متغيرش تاريخ الانتهاء الحالي.`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+      return;
+  }
+  if (state.action === 'WAITING_EDIT_USER_DURATION') {
+      const payload: any = { userId: state.tempData.id };
+
+      // Handle Start Date
+      if (state.tempData.startDate) {
+          payload.startDate = state.tempData.startDate.toISOString();
+      }
+
+      // Handle End Date ( Duration )
+      if (text.toLowerCase() !== 'keep') {
+          const days = parseInt(text);
+          if (isNaN(days) || days <= 0) {
+              await ctx.reply("⚠️ رقم مش صحيح. اكتب رقم أو keep.");
+              return;
+          }
+           // Calculate End Date based on (New Start Date OR Current Start???)
+           // Logic: If updating duration, we usually mean "From Start Date"
+           // Verification: We need the start date to calculate end date carefully.
+           // However, simple approach: If start date was updated, use that. If not, we might need to fetch user?
+           // Actually, simpler: Allow user to input End Date directly? No, duration is easier.
+           // Let's assume: If start date is updated, duration starts from there.
+           // If start date is KEEP, we need to know current start date to add duration?
+           // OR we just ask for specific End Date?
+           // Refined Plan: Just ask for End Date directly in Edit Mode?
+           // User Request: "user can selet the data as well as editing it later"
+           // Let's deduce End Date from Start + Duration.
+           // If Start is KEEP, we need current start.
+           // Fetch user data first in 'user_select_edit' would have been better.
+
+           // Quick Fix: Fetch user now if needed.
+           let baseStartDate = state.tempData.startDate;
+           if (!baseStartDate) {
+               // Need to fetch user to get their current start date
+               try {
+                   const res = await axios.get(`${config.apiBaseUrl}/subscription?userId=${state.tempData.id}`);
+                   if (res.data.success && res.data.data) {
+                       baseStartDate = new Date(res.data.data.startDate);
+                   } else {
+                       baseStartDate = new Date(); // Fallback
+                   }
+               } catch(e) { baseStartDate = new Date(); }
+           }
+
+           const newEnd = new Date(baseStartDate);
+           newEnd.setDate(newEnd.getDate() + days);
+           payload.endDate = newEnd.toISOString();
+      }
+
+      try {
+        await axios.patch(`${config.apiBaseUrl}/subscription`, payload);
+        await ctx.reply(`✅ **تم التعديل بنجاح!**`, { parse_mode: "Markdown", ...UsersMenu });
         clearState(userId);
       } catch (e) { await ctx.reply("❌ Error"); }
       return;
@@ -592,6 +697,46 @@ bot.action(/faqs_list_(.+)/, async (ctx) => {
         }
     } catch (e) { await ctx.answerCbQuery("Error"); }
 });
+
+// --- Edit Users Handlers ---
+bot.action(/users_edit_list_(.+)/, async (ctx) => {
+    const page = parseInt(ctx.match[1]);
+    try {
+        const res = await axios.get(`${config.apiBaseUrl}/subscription`);
+        if (res.data.success) {
+            const users = res.data.data;
+            const perPage = 5;
+            const maxPage = Math.ceil(users.length / perPage) - 1;
+            const current = Math.min(Math.max(0, page), maxPage);
+            const start = current * perPage;
+            const chunk = users.slice(start, start + perPage);
+
+            const buttons = chunk.map((u:any) => [Markup.button.callback(`✏️ ${u.name || "مجهول"}`, `user_select_edit_${u.userId}`)]);
+
+            const navButtons = [];
+            if (current > 0) navButtons.push(Markup.button.callback("⬅️ سابق", `users_edit_list_${current - 1}`));
+            if (current < maxPage) navButtons.push(Markup.button.callback("تالي ➡️", `users_edit_list_${current + 1}`));
+            if(navButtons.length > 0) buttons.push(navButtons);
+
+            buttons.push([CancelBtn]);
+
+            await ctx.editMessageText(`✏️ **اختار المشترك لتعديل اشتراكه:**\nصفحة ${current + 1} من ${maxPage + 1}`, { parse_mode: "Markdown", ...Markup.inlineKeyboard(buttons) });
+        }
+    } catch (e) { await ctx.answerCbQuery("Error"); }
+});
+
+bot.action(/user_select_edit_(.+)/, async (ctx) => {
+    const userId = ctx.match[1];
+    setState(ctx.from!.id, { action: 'WAITING_EDIT_USER_START_DATE', tempData: { id: userId } });
+    await ctx.editMessageText(`📅 **تعديل تاريخ الاشتراك**\n🆔 \`${userId}\`\n\nدخل تاريخ البداية الجديد (YYYY-MM-DD):\nأو اكتب "keep" عشان متغيروش.`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
+});
+
+
+// Add to Text Handler for Edit Flow
+/*
+// NOTE: I will add the text handlers for editing inside the main text handler block in a separate edit
+// to avoid complex multi-block replacement.
+*/
 
 bot.action("faqs_add_start", (ctx) => {
     setState(ctx.from!.id, { action: 'WAITING_ADD_FAQ_Q' });
