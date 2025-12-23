@@ -66,8 +66,8 @@ const mediaBuffers = new Map<string, MediaBufferState>();
 const userTyping = new Map<string, number>();
 
 // --- Process Aggregated Text ---
-const processAggregatedMessage = async (client: TelegramClient, userId: number, aggregatedText: string, latestEvent: NewMessageEvent) => {
-    messageBuffers.delete(userId.toString());
+const processAggregatedMessage = async (client: TelegramClient, userId: string, aggregatedText: string, latestEvent: NewMessageEvent) => {
+    messageBuffers.delete(userId);
 
     try {
         const sender = await latestEvent.message.getSender();
@@ -122,9 +122,9 @@ const processAggregatedMessage = async (client: TelegramClient, userId: number, 
 };
 
 // --- Process Aggregated Media ---
-const processAggregatedMedia = async (client: TelegramClient, userId: number, state: MediaBufferState) => {
+const processAggregatedMedia = async (client: TelegramClient, userId: string, state: MediaBufferState) => {
     const { items, event } = state;
-    mediaBuffers.delete(userId.toString());
+    mediaBuffers.delete(userId);
 
     if (items.length === 0) return;
 
@@ -132,18 +132,8 @@ const processAggregatedMedia = async (client: TelegramClient, userId: number, st
         const sender = await event.message.getSender();
         const { name, username } = getSenderInfo(sender);
 
-        // Notify user we are starting (if many items)
-        if (items.length > 2) {
-             await event.message.reply({ message: `وصلني ${items.length} ملفات، جاري تجميعهم... 📂` });
-        } else {
-             const processingMessages = [
-                "تمام وصل، ثانية واحدة...",
-                "وصل يا غالي، هبص عليه وأرد عليك حالاً",
-                "حلو أوي، دقيقة واحدة...",
-             ];
-             const randomMsg = processingMessages[Math.floor(Math.random() * processingMessages.length)];
-             await event.message.reply({ message: randomMsg });
-        }
+        // Notify user block removed for silent processing
+
 
         const attachments: { url: string; type: string }[] = [];
         let combinedCaption = "";
@@ -221,7 +211,7 @@ export const setupCommands = (client: TelegramClient) => {
            const buffer = messageBuffers.get(userId);
            if (buffer) {
                clearTimeout(buffer.timer);
-               buffer.timer = setTimeout(() => processAggregatedMessage(client, Number(userId), buffer.text, buffer.event), 2500);
+               buffer.timer = setTimeout(() => processAggregatedMessage(client, userId, buffer.text, buffer.event), 2500);
            }
       }
   });
@@ -234,7 +224,7 @@ export const setupCommands = (client: TelegramClient) => {
         if (event.message.text) {
              const chatId = event.chatId;
              if (chatId) {
-                 await addToHistory(Number(chatId), "assistant", event.message.text);
+                 await addToHistory(chatId.toString(), "assistant", event.message.text);
              }
         }
         return;
@@ -273,8 +263,7 @@ export const setupCommands = (client: TelegramClient) => {
     // Command Handling
     const text = message.text || "";
     if (text === "/start") {
-        const senderId = Number(sender.id);
-        await clearHistory(senderId);
+        await clearHistory(userId);
         await message.reply({ message: "أهلاً! 😊 أنا مساعد الأستاذ. اسألني عن الكورسات والمواعيد والأسعار." });
         return;
     }
@@ -324,7 +313,7 @@ export const setupCommands = (client: TelegramClient) => {
             clearTimeout(mediaState.timer);
             mediaState.timer = setTimeout(() => {
                 const s = mediaBuffers.get(userId);
-                if (s) processAggregatedMedia(client, Number(userId), s);
+                if (s) processAggregatedMedia(client, userId, s);
             }, 3500);
 
             return; // STOP here, don't process as text
@@ -355,13 +344,13 @@ export const setupCommands = (client: TelegramClient) => {
             existing.event = event; // Update reference to reply to latest
             // Set new timer
             const delay = calculateDelay(text);
-            existing.timer = setTimeout(() => processAggregatedMessage(client, Number(userId), existing.text, existing.event), delay);
+            existing.timer = setTimeout(() => processAggregatedMessage(client, userId, existing.text, existing.event), delay);
         } else {
             // New Buffer
             const delay = calculateDelay(text);
             const state: BufferState = {
                 text: text,
-                timer: setTimeout(() => processAggregatedMessage(client, Number(userId), text, event), delay),
+                timer: setTimeout(() => processAggregatedMessage(client, userId, text, event), delay),
                 event: event
             };
             messageBuffers.set(userIdStr, state);

@@ -5,7 +5,7 @@ export interface ChatMessage {
   parts: { text: string; image_url?: { url: string } }[];
 }
 
-export const getHistory = async (userId: number): Promise<ChatMessage[]> => {
+export const getHistory = async (userId: string | number): Promise<ChatMessage[]> => {
   try {
     const res = await fetch(
       `${config.apiBaseUrl}/chat/history?userId=${userId}`,
@@ -56,7 +56,7 @@ export const getHistory = async (userId: number): Promise<ChatMessage[]> => {
 };
 
 export const addToHistory = async (
-  userId: number,
+  userId: string | number,
   role: "user" | "model" | "assistant",
   text: string,
   username?: string,
@@ -79,7 +79,7 @@ export const addToHistory = async (
   }
 };
 
-export const clearHistory = async (userId: number) => {
+export const clearHistory = async (userId: string | number) => {
   try {
     await fetch(`${config.apiBaseUrl}/chat/history?userId=${userId}`, {
       method: "DELETE",
