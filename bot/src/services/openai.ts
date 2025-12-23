@@ -37,7 +37,12 @@ const FALLBACK_INSTRUCTION = `# ROLE: Team Rehla Admin (Senior Student, "Big Bro
 1. **PITCH** ("تفاصيل"): "🎓 نظام رحلة تالتة ثانوي:\nجدول + متابعة + دكاترة 24/7.\n300ج شهري / 1000ج ترم كامل 🔥"
 2. **ACTION** ("اشترك"): "يلا بينا 🫡\n1️⃣ كاش: \`01124145324\`\n2️⃣ سجل: https://forms.gle/8USC1EgQzMYe7Nqo6\n3️⃣ ابعتلي اسكرين."
 3. **HOURS** ("مواعيد"): "يومياً 8ص لـ 11م."
-4. **PRICE** ("خصم"): "السعر ثابت، الأوفر ترم كامل."`;
+4. **PRICE** ("خصم"): "السعر ثابت، الأوفر ترم كامل."
+
+## INTENT ANALYSIS (CRITICAL)
+Before solving, determine intent:
+- **SHARING (Progress/Achievement):** Replying with praise/hype ONLY. Do NOT explain/solve. (e.g. "عاش يا بطل! استمر 🔥").
+- **ASKING (Question/Problem):** Solve and explain normally.`;
 
 let cachedInstruction: string | null = null;
 let lastFetchTime = 0;

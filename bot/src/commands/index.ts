@@ -49,18 +49,39 @@ interface BufferState {
 }
 const messageBuffers = new Map<string, BufferState>();
 
+// Media Buffer Types
+interface MediaItem {
+    buffer: Buffer;
+    caption: string;
+    type: 'photo' | 'document';
+    filename?: string;
+}
+interface MediaBufferState {
+    items: MediaItem[];
+    timer: NodeJS.Timeout;
+    event: NewMessageEvent;
+}
+const mediaBuffers = new Map<string, MediaBufferState>();
+
 const userTyping = new Map<string, number>();
 
+// --- Process Aggregated Text ---
 const processAggregatedMessage = async (client: TelegramClient, userId: number, aggregatedText: string, latestEvent: NewMessageEvent) => {
-     messageBuffers.delete(userId.toString());
+    messageBuffers.delete(userId.toString());
 
-     try {
+    try {
         const sender = await latestEvent.message.getSender();
-        if (!sender || !('id' in sender)) return;
         const { name, username } = getSenderInfo(sender);
 
-        // NOTE: The "Wait Loop" is removed here because we now handle delay
-        // by resetting the timer in the typing event handler.
+        // Check if FAQ matches
+        const faqAnswer = await findMatchingFAQ(aggregatedText);
+        if (faqAnswer) {
+            await latestEvent.message.reply({ message: faqAnswer });
+            await addToHistory(userId, "user", aggregatedText, username);
+            await addToHistory(userId, "model", faqAnswer, username);
+            await logConversation(userId, name, aggregatedText, faqAnswer);
+            return;
+        }
 
         // Add aggregated text to history
         await addToHistory(userId, "user", aggregatedText, username);
@@ -100,6 +121,93 @@ const processAggregatedMessage = async (client: TelegramClient, userId: number, 
     }
 };
 
+// --- Process Aggregated Media ---
+const processAggregatedMedia = async (client: TelegramClient, userId: number, state: MediaBufferState) => {
+    const { items, event } = state;
+    mediaBuffers.delete(userId.toString());
+
+    if (items.length === 0) return;
+
+    try {
+        const sender = await event.message.getSender();
+        const { name, username } = getSenderInfo(sender);
+
+        // Notify user we are starting (if many items)
+        if (items.length > 2) {
+             await event.message.reply({ message: `وصلني ${items.length} ملفات، جاري تجميعهم... 📂` });
+        } else {
+             const processingMessages = [
+                "تمام وصل، ثانية واحدة...",
+                "وصل يا غالي، هبص عليه وأرد عليك حالاً",
+                "حلو أوي، دقيقة واحدة...",
+             ];
+             const randomMsg = processingMessages[Math.floor(Math.random() * processingMessages.length)];
+             await event.message.reply({ message: randomMsg });
+        }
+
+        const attachments: { url: string; type: string }[] = [];
+        let combinedCaption = "";
+
+        // 1. Upload Loop
+        for (const item of items) {
+            if (item.caption) combinedCaption += item.caption + "\n";
+            try {
+                const uploadResult = await uploadMedia(item.buffer);
+
+                // If PDF, get pages
+                if (uploadResult.format === 'pdf' || item.filename?.endsWith('.pdf')) {
+                    const pageUrls = getPDFPageUrls(uploadResult.public_id, uploadResult.pages || 5);
+                    pageUrls.forEach(url => attachments.push({ url, type: "image/pdf_page" }));
+                } else {
+                    // Normal Image/Video
+                    attachments.push({ url: uploadResult.secure_url, type: uploadResult.resource_type || "image" });
+                }
+            } catch (e) {
+                console.error("Upload failed for item:", e);
+            }
+        }
+
+        // 2. Generate Response
+        // Add user caption to history first
+        const userPrompt = combinedCaption.trim() || "[Media Message]";
+        await addToHistory(userId, "user", userPrompt, username);
+
+        const isSubscribed = await checkSubscription(userId.toString());
+        const history = await getHistory(userId);
+
+        const response = await generateResponse(
+            history,
+            attachments, // Pass all URLs
+            undefined,
+            isSubscribed,
+            userId.toString(),
+            async (emoji) => {
+                try {
+                    await client.invoke(new Api.messages.SendReaction({
+                        peer: sender,
+                        msgId: event.message.id,
+                        reaction: [new Api.ReactionEmoji({ emoticon: emoji })]
+                    }));
+                } catch(e) { console.error("Reaction failed:", e); }
+            }
+        );
+
+        if (response) {
+            await event.message.reply({ message: response });
+            await addToHistory(userId, "model", response, username);
+            await logConversation(userId, name, `[${items.length} Attachments] ${userPrompt}`, response);
+        } else {
+             await addToHistory(userId, "model", "[Reaction Sent]", username);
+             await logConversation(userId, name, `[${items.length} Attachments] ${userPrompt}`, "[Reaction Sent]");
+        }
+
+    } catch (e) {
+        console.error("Error processing aggregated media:", e);
+        await event.message.reply({ message: "معلش حصل مشكلة في معالجة الصور. جرب تاني." });
+    }
+};
+
+
 export const setupCommands = (client: TelegramClient) => {
 
   // Raw Event Handler for Typing Status
@@ -109,20 +217,19 @@ export const setupCommands = (client: TelegramClient) => {
            const userId = update.userId.toString();
            userTyping.set(userId, Date.now() + 6000); // 6s expiry
 
-           // EXTEND DEBOUNCE: If buffer exists, user is typing -> adding more text!
+           // EXTEND TEXT DEBOUNCE
            const buffer = messageBuffers.get(userId);
            if (buffer) {
-               console.log(`[Typing] User ${userId} is typing. Extending wait...`);
                clearTimeout(buffer.timer);
-               // Wait 2.5s from now (Assuming typing implies more text soon)
                buffer.timer = setTimeout(() => processAggregatedMessage(client, Number(userId), buffer.text, buffer.event), 2500);
            }
       }
   });
 
   client.addEventHandler(async (event: NewMessageEvent) => {
-    // ... (Existing NewMessage logic)
     if (!event.isPrivate) return;
+
+    // Handle Outgoing (Admin replies)
     if (event.message.out) {
         if (event.message.text) {
              const chatId = event.chatId;
@@ -158,34 +265,23 @@ export const setupCommands = (client: TelegramClient) => {
     }
     // ---------------------------
 
-    // Ignore other bots and Telegram Service (777000, 42777)
+    // Ignore other bots and Telegram Service
     if (sender && 'bot' in sender && sender.bot) return;
     if (sender && 'id' in sender && (sender.id.toString() === "777000" || sender.id.toString() === "42777")) return;
 
 
-    const text = message.text;
-    const isPhoto = !!message.media && message.media instanceof Api.MessageMediaPhoto;
-
+    // Command Handling
+    const text = message.text || "";
     if (text === "/start") {
-        const sender = await message.getSender();
-        if (sender && 'id' in sender) {
-             const senderId = Number(sender.id);
-             await clearHistory(senderId);
-        }
+        const senderId = Number(sender.id);
+        await clearHistory(senderId);
         await message.reply({ message: "أهلاً! 😊 أنا مساعد الأستاذ. اسألني عن الكورسات والمواعيد والأسعار." });
         return;
     }
-
     if (text === "/help") {
          await message.reply({ message: "ابعتلي أي سؤال وهرد عليك. استخدم /model لتغيير الذكاء الاصطناعي." });
          return;
     }
-
-    if (text === "/model") {
-        await message.reply({ message: "حالياً أنا شغال بنظام OpenAI المطور (ChatGPT) بس 🤖" });
-        return;
-    }
-
     if (text === "/reload") {
         await message.reply({ message: "جاري تحديث النظام والإعدادات... ⏳" });
         try {
@@ -198,165 +294,77 @@ export const setupCommands = (client: TelegramClient) => {
         return;
     }
 
-    // 2. Handle Media (Photo, Video, Document)
-    if (message.media) {
-      try {
-        const caption = message.text || "";
-
-        // Download media into a Buffer
-        const buffer = await client.downloadMedia(message.media, {}) as Buffer;
-
-        if (!buffer) {
-             await message.reply({ message: "فشل تحميل الملف. حاول تاني." });
-             return;
-        }
-
-        // Upload to Cloudinary
-        let mediaUrl = "";
-        let pdfPageUrls: string[] = [];
-
+    // --- Media Handling (Aggregated) ---
+    if (message.media && !(message.media instanceof Api.MessageMediaWebPage)) {
+        // Skip WebPage previews, handle Photos/Documents
         try {
-            const uploadResult = await uploadMedia(buffer);
-            mediaUrl = uploadResult.secure_url;
+            const buffer = await client.downloadMedia(message.media, {}) as Buffer;
+            if (!buffer) return;
 
-            // Check if it's a PDF
-            if (uploadResult.format === 'pdf' || mediaUrl.endsWith('.pdf')) {
-                 const pageCount = uploadResult.pages || 5;
+            const caption = message.text || "";
+            const isPhoto = message.media instanceof Api.MessageMediaPhoto;
 
-                 if (pageCount > 5) {
-                     await message.reply({ message: "ال PDF كبير شوية، هقرأ أول 5 صفحات بس وهركز فيهم يا بطل 📖" });
-                 } else {
-                     const processingMessages = [
-                        "تمام وصل، ثانية واحدة بقرأه",
-                        "وصل يا غالي، هبص عليه وأرد عليك حالاً",
-                        "حلو أوي، دقيقة واحدة أقرأ الملف وأقولك",
-                        "تمام، سيبني أركز في الملف لحظة وأجيلك",
-                        "ماشي، هشوف الملف فيه إيه وأرد عليك علطول",
-                        "تمام، بقرأ الملف أهو.. ثواني",
-                        "وصلني، ثواني وأكون معاك بالرد"
-                     ];
-                     const randomMsg = processingMessages[Math.floor(Math.random() * processingMessages.length)];
-                     await message.reply({ message: randomMsg });
-                 }
-
-                 pdfPageUrls = getPDFPageUrls(uploadResult.public_id, pageCount);
+            // Get or Create Buffer
+            let mediaState = mediaBuffers.get(userId);
+            if (!mediaState) {
+                mediaState = { items: [], timer: setTimeout(() => {}, 0), event: event };
+                mediaBuffers.set(userId, mediaState);
             }
 
-        } catch (uploadError) {
-             console.error("Cloudinary upload failed:", uploadError);
-             await message.reply({ message: "فشل رفع الملف للسيرفر." });
-             return;
+            // Add Item
+            mediaState.items.push({
+                buffer,
+                caption,
+                type: isPhoto ? 'photo' : 'document',
+                filename: 'documentAttribute' in message.media ? (message.media.documentAttribute as any)?.filename : undefined
+            });
+            mediaState.event = event; // Update latest event
+
+            // Reset Timer (Wait 4s for more photos in album)
+            clearTimeout(mediaState.timer);
+            mediaState.timer = setTimeout(() => {
+                const s = mediaBuffers.get(userId);
+                if (s) processAggregatedMedia(client, Number(userId), s);
+            }, 3500);
+
+            return; // STOP here, don't process as text
+        } catch (e) {
+            console.error("Media download error:", e);
         }
-
-        const sender = await message.getSender();
-        if (!sender || !('id' in sender)) return;
-        const userId = Number(sender.id);
-        const { name, username } = getSenderInfo(sender);
-
-        // Construct Attachments Array
-        let mimeType = 'document';
-        if (mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i)) mimeType = 'image/jpeg';
-        else if (mediaUrl.match(/\.(mp4|webm|mov)$/i)) mimeType = 'video/mp4';
-        else if (mediaUrl.endsWith('.pdf') || pdfPageUrls.length > 0) mimeType = 'application/pdf';
-
-        const attachments = [{ url: mediaUrl, type: mimeType }];
-
-        // If PDF pages exist, add them as "virtual" image attachments for the AI to see
-        let aiAttachments = [...attachments];
-        if (pdfPageUrls.length > 0) {
-            aiAttachments = pdfPageUrls.map(url => ({ url, type: 'image/jpeg' }));
-        }
-
-        // Log text part AND media URL
-        await addToHistory(userId, "user", caption, username, attachments);
-
-        // Check Subscription
-        const isSubscribed = await checkSubscription(userId.toString());
-
-                // Pass URL directly to AI
-        const history = await getHistory(userId);
-        const response = await generateResponse(
-            history,
-            aiAttachments, // Send page images to AI instead of original PDF url if applicable
-            async (msg) => { await message.reply({ message: msg }); },
-            isSubscribed,
-            userId.toString(),
-            async (emoji) => {
-                try {
-                    await client.invoke(new Api.messages.SendReaction({
-                        peer: sender,
-                        msgId: message.id,
-                        reaction: [new Api.ReactionEmoji({ emoticon: emoji })]
-                    }));
-                } catch(e) { console.error("Reaction failed:", e); }
-            }
-        );
-
-        if (response) {
-             await message.reply({ message: response });
-             await addToHistory(userId, "model", response, username);
-
-             await logConversation(
-                userId,
-                name,
-                `[Attachment: ${mediaUrl}] ${caption}`,
-                response
-             );
-        } else {
-             await addToHistory(userId, "model", "[Reaction Sent]", username);
-             await logConversation(userId, name, `[Attachment: ${mediaUrl}] ${caption}`, "[Reaction Sent]");
-        }
-
-      } catch (error) {
-        console.error("Error processing media:", error);
-        await message.reply({ message: "حصل مشكلة وأنا بحلل الملف. معلش جرب تاني." });
-      }
-      return;
     }
 
-    // 3. Handle Text (With Debounce)
-    if (text && !text.startsWith("/")) {
-        const sender = await message.getSender();
-        if (!sender || !('id' in sender)) return;
-        const userId = Number(sender.id);
-        const me = await client.getMe();
-        if (sender.id.toString() === me.id.toString()) return;
 
+    // --- Text Handling (Aggregated) ---
+    if (text && !text.startsWith("/")) {
         // Debounce Logic
         const userIdStr = userId.toString();
         const existing = messageBuffers.get(userIdStr);
 
         // Adaptive Debounce Strategy
         const calculateDelay = (txt: string) => {
-            if (txt.length < 15) return 3500; // "Hello", "Hi", "Question" -> Wait 3.5s
-            if (txt.length < 50) return 2500; // Medium sentence -> Wait 2.5s
-            return 1500; // Long paragraph -> Wait 1.5s
+            if (txt.length < 15) return 3500;
+            if (txt.length < 50) return 2500;
+            return 1500;
         };
 
         if (existing) {
+            // Cancel previous timer
             clearTimeout(existing.timer);
-            const newText = existing.text + "\n" + text;
-            const delay = calculateDelay(newText);
-
-            // Just update buffer
-            existing.text = newText;
-            existing.event = event;
-            existing.timer = setTimeout(() => processAggregatedMessage(client, userId, newText, event), delay);
-
-        } else {
-            try {
-                await client.invoke(new Api.messages.SetTyping({
-                    peer: sender,
-                    action: new Api.SendMessageTypingAction()
-                }));
-            } catch (e) { console.error("Typing status failed", e); }
-
+            // Append text
+            existing.text += `\n${text}`;
+            existing.event = event; // Update reference to reply to latest
+            // Set new timer
             const delay = calculateDelay(text);
-            messageBuffers.set(userIdStr, {
+            existing.timer = setTimeout(() => processAggregatedMessage(client, Number(userId), existing.text, existing.event), delay);
+        } else {
+            // New Buffer
+            const delay = calculateDelay(text);
+            const state: BufferState = {
                 text: text,
-                event: event,
-                timer: setTimeout(() => processAggregatedMessage(client, userId, text, event), delay)
-            });
+                timer: setTimeout(() => processAggregatedMessage(client, Number(userId), text, event), delay),
+                event: event
+            };
+            messageBuffers.set(userIdStr, state);
         }
     }
 
