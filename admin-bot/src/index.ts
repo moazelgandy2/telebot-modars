@@ -224,7 +224,133 @@ bot.action("menu_stats", async (ctx) => {
     }
 });
 bot.action("menu_users", (ctx) => ctx.editMessageText("👥 **إدارة المشتركين**", { parse_mode: "Markdown", ...UsersMenu }));
-bot.action("menu_system", (ctx) => ctx.editMessageText("📜 **تعليمات النظام**", { parse_mode: "Markdown", ...SystemMenu }));
+bot.action("menu_system", async (ctx) => {
+    try {
+        const res = await axios.get(`${config.apiBaseUrl}/settings`);
+        const { botActive, replyTarget } = res.data.data || {};
+        const isActive = botActive !== 'false';
+        const isSubOnly = replyTarget === 'subscribers';
+
+        const statusIcon = isActive ? "✅" : "🛑";
+        const statusText = isActive ? "شغال" : "واقف";
+        const targetIcon = isSubOnly ? "👥" : "🌍";
+        const targetText = isSubOnly ? "مشتركين بس" : "الكل";
+
+        const msg = `📜 **تعليمات النظام والتحكم**\n━━━━━━━━━━━━━━━━\n\n` +
+                    `🔌 **حالة البوت:** ${statusIcon} ${statusText}\n` +
+                    `🎯 **الرد على:** ${targetIcon} ${targetText}\n\n` +
+                    `تحكم في إعدادات النظام من هنا 👇`;
+
+        await ctx.editMessageText(msg, {
+            parse_mode: "Markdown",
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback(`الوضع: ${isActive ? 'إيقاف 🛑' : 'تشغيل ✅'}`, "toggle_status"), Markup.button.callback(`الهدف: ${isSubOnly ? 'الكل 🌍' : 'مشتركين 👥'}`, "toggle_target")],
+                [Markup.button.callback("عرض التعليمات 👀", "system_view"), Markup.button.callback("تعديل التعليمات ✏️", "system_edit")],
+                [Markup.button.callback("🕰️ ساعات العمل", "hours_view")],
+                [BackToMainBtn]
+            ])
+        });
+    } catch (e) {
+        console.error("System Menu Error:", e);
+        ctx.answerCbQuery("Error loading settings");
+    }
+});
+
+bot.action("toggle_status", async (ctx) => {
+    try {
+        // 1. Get current
+        const getRes = await axios.get(`${config.apiBaseUrl}/settings`);
+        const currentSettings = getRes.data.data || {};
+        const currentActive = currentSettings.botActive !== 'false';
+
+        // 2. Toggle
+        const newActive = !currentActive;
+
+        // 3. Save
+        await axios.post(`${config.apiBaseUrl}/settings`, { ...currentSettings, botActive: String(newActive) });
+
+        // 4. Refresh Menu
+        // We reuse the logic by virtually calling menu_system, but editMessageText with same content might throw if not changed,
+        // so we manually trigger the same flow or just call the handler if extracted.
+        // For simplicity, we'll just re-run the menu_system logic or ask user to refresh.
+        // Better: Re-render the menu.
+
+        // Let's copy-paste the re-render logic for now or extract it.
+        // To avoid code duplication, I'll essentially just re-run the fetching and editing.
+        const res = await axios.get(`${config.apiBaseUrl}/settings`); // fetch again to be sure
+        const { botActive, replyTarget } = res.data.data || {};
+         const isActive = botActive !== 'false';
+        const isSubOnly = replyTarget === 'subscribers';
+
+        const statusIcon = isActive ? "✅" : "🛑";
+        const statusText = isActive ? "شغال" : "واقف";
+        const targetIcon = isSubOnly ? "👥" : "🌍";
+        const targetText = isSubOnly ? "مشتركين بس" : "الكل";
+
+        const msg = `📜 **تعليمات النظام والتحكم**\n━━━━━━━━━━━━━━━━\n\n` +
+                    `🔌 **حالة البوت:** ${statusIcon} ${statusText}\n` +
+                    `🎯 **الرد على:** ${targetIcon} ${targetText}\n\n` +
+                    `تحكم في إعدادات النظام من هنا 👇`;
+
+        await ctx.editMessageText(msg, {
+            parse_mode: "Markdown",
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback(`الوضع: ${isActive ? 'إيقاف 🛑' : 'تشغيل ✅'}`, "toggle_status"), Markup.button.callback(`الهدف: ${isSubOnly ? 'الكل 🌍' : 'مشتركين 👥'}`, "toggle_target")],
+                [Markup.button.callback("عرض التعليمات 👀", "system_view"), Markup.button.callback("تعديل التعليمات ✏️", "system_edit")],
+                [Markup.button.callback("🕰️ ساعات العمل", "hours_view")],
+                [BackToMainBtn]
+            ])
+        });
+        await ctx.answerCbQuery(newActive ? "تم التشغيل ✅" : "تم الإيقاف 🛑");
+
+    } catch (e) {
+        console.error("Toggle Status Error:", e);
+        ctx.answerCbQuery("Error toggling status");
+    }
+});
+
+bot.action("toggle_target", async (ctx) => {
+    try {
+        const getRes = await axios.get(`${config.apiBaseUrl}/settings`);
+        const currentSettings = getRes.data.data || {};
+        const currentTarget = currentSettings.replyTarget || 'all';
+
+        const newTarget = currentTarget === 'all' ? 'subscribers' : 'all';
+
+        await axios.post(`${config.apiBaseUrl}/settings`, { ...currentSettings, replyTarget: newTarget });
+
+        // Re-render
+        const res = await axios.get(`${config.apiBaseUrl}/settings`);
+        const { botActive, replyTarget } = res.data.data || {};
+        const isActive = botActive !== 'false';
+        const isSubOnly = replyTarget === 'subscribers';
+
+        const statusIcon = isActive ? "✅" : "🛑";
+        const statusText = isActive ? "شغال" : "واقف";
+        const targetIcon = isSubOnly ? "👥" : "🌍";
+        const targetText = isSubOnly ? "مشتركين بس" : "الكل";
+
+        const msg = `📜 **تعليمات النظام والتحكم**\n━━━━━━━━━━━━━━━━\n\n` +
+                    `🔌 **حالة البوت:** ${statusIcon} ${statusText}\n` +
+                    `🎯 **الرد على:** ${targetIcon} ${targetText}\n\n` +
+                    `تحكم في إعدادات النظام من هنا 👇`;
+
+        await ctx.editMessageText(msg, {
+            parse_mode: "Markdown",
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback(`الوضع: ${isActive ? 'إيقاف 🛑' : 'تشغيل ✅'}`, "toggle_status"), Markup.button.callback(`الهدف: ${isSubOnly ? 'الكل 🌍' : 'مشتركين 👥'}`, "toggle_target")],
+                [Markup.button.callback("عرض التعليمات 👀", "system_view"), Markup.button.callback("تعديل التعليمات ✏️", "system_edit")],
+                [Markup.button.callback("🕰️ ساعات العمل", "hours_view")],
+                [BackToMainBtn]
+            ])
+        });
+        await ctx.answerCbQuery(newTarget === 'subscribers' ? "مشتركين بس 👥" : "للجميع 🌍");
+
+    } catch (e) {
+        console.error("Toggle Target Error:", e);
+        ctx.answerCbQuery("Error toggling target");
+    }
+});
 bot.action("menu_faqs", (ctx) => ctx.editMessageText("❓ **إدارة الأسئلة**", { parse_mode: "Markdown", ...FaqsMenu }));
 bot.action("menu_admins", (ctx) => ctx.editMessageText("👮 **إدارة الآدمنز**", { parse_mode: "Markdown", ...AdminsMenu }));
 

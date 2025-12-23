@@ -70,3 +70,13 @@ export const isWithinWorkingHours = async (): Promise<boolean> => {
         return true; // Fail open
     }
 };
+
+export const isBotActive = async (): Promise<boolean> => {
+    const settings = await getSettings();
+    return settings["botActive"] !== "false"; // Default to true
+};
+
+export const getReplyTarget = async (): Promise<'all' | 'subscribers'> => {
+    const settings = await getSettings();
+    return (settings["replyTarget"] as 'all' | 'subscribers') || 'all';
+};

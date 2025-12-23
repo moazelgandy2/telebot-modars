@@ -6,6 +6,7 @@ import { addToHistory, getHistory, clearHistory } from "../utils/memory.js";
 import { uploadMedia, getPDFPageUrls } from "../utils/uploader.js";
 import config from "../config.js";
 import { findMatchingFAQ } from "../services/faq.js";
+import { isBotActive, getReplyTarget, isWithinWorkingHours } from "../utils/settings.js";
 
 const getSenderInfo = (sender: any) => {
    let name = "Unknown";
@@ -132,12 +133,35 @@ export const setupCommands = (client: TelegramClient) => {
         return;
     }
 
-    const sender = await event.message.getSender();
+    const message = event.message;
+    const sender = await message.getSender();
+    if (!sender) return;
+    const userId = sender.id!.toString();
+
+    // --- GLOBAL BOT CONTROLS ---
+    // 1. Master Switch
+    const isActive = await isBotActive();
+    if (!isActive) return; // Silent Ignore
+
+    // 2. Subscription Filter
+    const replyTarget = await getReplyTarget();
+    if (replyTarget === 'subscribers') {
+        const isSub = await checkSubscription(userId);
+        if (!isSub) return; // Silent Ignore
+    }
+
+    // 3. Working Hours
+    const isOpen = await isWithinWorkingHours();
+    if (!isOpen) {
+         console.log(`[Working Hours] Ignored message from ${userId} (Outside Working Hours).`);
+         return; // Silent Ignore
+    }
+    // ---------------------------
+
     // Ignore other bots and Telegram Service (777000, 42777)
     if (sender && 'bot' in sender && sender.bot) return;
     if (sender && 'id' in sender && (sender.id.toString() === "777000" || sender.id.toString() === "42777")) return;
 
-    const message = event.message;
 
     const text = message.text;
     const isPhoto = !!message.media && message.media instanceof Api.MessageMediaPhoto;
@@ -297,14 +321,6 @@ export const setupCommands = (client: TelegramClient) => {
         const userId = Number(sender.id);
         const me = await client.getMe();
         if (sender.id.toString() === me.id.toString()) return;
-
-        // CHECK WORKING HOURS
-        const { isWithinWorkingHours } = await import("../utils/settings.js");
-        const isOpen = await isWithinWorkingHours();
-        if (!isOpen) {
-             console.log(`[Working Hours] Ignored message from ${userId} (Outside Working Hours).`);
-             return; // Silent Ignore
-        }
 
         // Debounce Logic
         const userIdStr = userId.toString();

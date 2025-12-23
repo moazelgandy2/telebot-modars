@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {  Save, RefreshCw } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Save, RefreshCw, Power, Users } from "lucide-react";
 import { toast } from "sonner";
 
 export default function SettingsPage() {
@@ -14,6 +15,8 @@ export default function SettingsPage() {
     stringSession: '',
     aiWorkStart: '',
     aiWorkEnd: '',
+    botActive: true,
+    replyTarget: 'all', // 'all' | 'subscribers'
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -29,6 +32,8 @@ export default function SettingsPage() {
             stringSession: data.data.stringSession || '',
             aiWorkStart: data.data.aiWorkStart || '',
             aiWorkEnd: data.data.aiWorkEnd || '',
+            botActive: data.data.botActive !== 'false', // Default to true if missing or not 'false'
+            replyTarget: data.data.replyTarget || 'all',
           });
         }
       })
@@ -45,7 +50,11 @@ export default function SettingsPage() {
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify({
+             ...settings,
+             botActive: String(settings.botActive), // Convert to string for DB
+             replyTarget: settings.replyTarget
+        }),
       });
       const data = await res.json();
 
@@ -108,46 +117,86 @@ export default function SettingsPage() {
       {/* Compact Card */}
       <Card className="border-border/40 shadow-none bg-background/50 backdrop-blur-sm">
          <CardContent className="p-6">
-            <div className="grid gap-5">
+            <div className="grid gap-6">
 
-                {/* Credentials Group */}
-                <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground ml-1">معرف التطبيق (App ID)</label>
-                        <Input
-                            name="apiId"
-                            value={settings.apiId}
-                            onChange={handleChange}
-                            placeholder="123456"
-                            className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all"
-                            style={{ direction: 'ltr' }}
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground ml-1">رمز الوصول (App Hash)</label>
-                        <Input
-                            name="apiHash"
-                            value={settings.apiHash}
-                            onChange={handleChange}
-                            placeholder="Hash String"
-                            type="password"
-                            className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all"
-                            style={{ direction: 'ltr' }}
-                        />
+                {/* System Control Section */}
+                <div className="bg-muted/30 rounded-xl border border-border/50 p-4 space-y-4">
+                     <div className="flex items-center gap-2 mb-2">
+                        <Power className="w-4 h-4 text-primary" />
+                        <h3 className="text-sm font-semibold">تحكم النظام</h3>
+                     </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                        {/* Bot Active Switch */}
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-background border border-border/40 shadow-sm">
+                            <div className="space-y-0.5">
+                                <label className="text-sm font-medium">حالة البوت</label>
+                                <p className="text-xs text-muted-foreground">تفعيل أو إيقاف البوت كلياً</p>
+                            </div>
+                            <Switch
+                                checked={settings.botActive}
+                                onCheckedChange={(checked) => setSettings(s => ({ ...s, botActive: checked }))}
+                            />
+                        </div>
+
+                        {/* Reply Target Switch */}
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-background border border-border/40 shadow-sm">
+                            <div className="space-y-0.5">
+                                <div className="flex items-center gap-1.5">
+                                    <label className="text-sm font-medium">وضع المشتركين</label>
+                                    <Users className="w-3 h-3 text-muted-foreground" />
+                                </div>
+                                <p className="text-xs text-muted-foreground">الرد فقط على المشتركين</p>
+                            </div>
+                            <Switch
+                                checked={settings.replyTarget === 'subscribers'}
+                                onCheckedChange={(checked) => setSettings(s => ({ ...s, replyTarget: checked ? 'subscribers' : 'all' }))}
+                            />
+                        </div>
                     </div>
                 </div>
 
-                <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground ml-1">جلسة المصادقة (String Session)</label>
-                    <Input
-                        name="stringSession"
-                        value={settings.stringSession}
-                        onChange={handleChange}
-                        placeholder="1BVts..."
-                        type="password"
-                        className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all"
-                        style={{ direction: 'ltr' }}
-                    />
+                {/* Credentials Group */}
+                <div className="space-y-3">
+                    <h3 className="text-md font-semibold text-foreground/90 px-1">بيانات الاتصال</h3>
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground ml-1">معرف التطبيق (App ID)</label>
+                            <Input
+                                name="apiId"
+                                value={settings.apiId}
+                                onChange={handleChange}
+                                placeholder="123456"
+                                className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all text-left dir-ltr"
+                                style={{ direction: 'ltr' }}
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-muted-foreground ml-1">رمز الوصول (App Hash)</label>
+                            <Input
+                                name="apiHash"
+                                value={settings.apiHash}
+                                onChange={handleChange}
+                                placeholder="Hash String"
+                                type="password"
+                                className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all text-left dir-ltr"
+                                style={{ direction: 'ltr' }}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground ml-1">جلسة المصادقة (String Session)</label>
+                        <Input
+                            name="stringSession"
+                            value={settings.stringSession}
+                            onChange={handleChange}
+                            placeholder="1BVts..."
+                            type="password"
+                            className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all text-left dir-ltr"
+                            style={{ direction: 'ltr' }}
+                        />
+                    </div>
                 </div>
 
                 {/* AI Working Hours */}
@@ -161,7 +210,7 @@ export default function SettingsPage() {
                                 value={settings.aiWorkStart}
                                 onChange={handleChange}
                                 placeholder="08:00"
-                                className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all"
+                                className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all text-left dir-ltr"
                                 style={{ direction: 'ltr' }}
                             />
                             <p className="text-[10px] text-muted-foreground">صيغة 24 ساعة (مثال: 08:00)</p>
@@ -173,7 +222,7 @@ export default function SettingsPage() {
                                 value={settings.aiWorkEnd}
                                 onChange={handleChange}
                                 placeholder="23:00"
-                                className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all"
+                                className="h-9 font-mono text-sm bg-muted/50 border-border/50 focus:border-primary/50 focus:ring-0 transition-all text-left dir-ltr"
                                 style={{ direction: 'ltr' }}
                             />
                             <p className="text-[10px] text-muted-foreground">صيغة 24 ساعة (مثال: 23:00)</p>
@@ -187,7 +236,7 @@ export default function SettingsPage() {
                         onClick={handleSave}
                         disabled={saving}
                         size="sm"
-                        className="gap-2 min-w-[100px] h-9"
+                        className="gap-2 min-w-[100px] h-9 transition-all hover:scale-[1.02] active:scale-[0.98]"
                     >
                        {saving ? <span className="animate-spin text-xs">⏳</span> : <Save className="w-3.5 h-3.5" />}
                        حفظ التغييرات
