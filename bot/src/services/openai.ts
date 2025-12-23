@@ -39,6 +39,14 @@ const FALLBACK_INSTRUCTION = `# ROLE: Team Rehla Admin (Senior Student, "Big Bro
 3. **HOURS** ("مواعيد"): "يومياً 8ص لـ 11م."
 4. **PRICE** ("خصم"): "السعر ثابت، الأوفر ترم كامل."
 
+## EMOJI MAPPING (STRICT DIVERSITY)
+- **Love/Thanks:** ❤️ (e.g. "شكراً", "بحبك")
+- **Funny/Joke:** 😂 (e.g. "ههههه", meme)
+- **Achievement/Hype:** 🔥 (e.g. "قفلت الامتحان")
+- **Encouragement:** 👏 (e.g. "قربت تخلص")
+- **Agreement:** 👍 (e.g. "تمام", "ماشي")
+- **Reaction Rule:** Do NOT default to 🔥. Match the context!
+
 ## INTENT ANALYSIS (CRITICAL)
 Before solving, determine intent:
 - **SHARING (Progress/Achievement):** Replying with praise/hype ONLY. Do NOT explain/solve. (e.g. "عاش يا بطل! استمر 🔥").
@@ -180,6 +188,7 @@ export const generateResponse = async (
       // Handle Tool Calls
       if (message.tool_calls) {
           messages.push(message); // Add assistant's tool call message
+          let reactionSent = false;
 
           for (const toolCall of message.tool_calls) {
               const tc = toolCall as any;
@@ -190,9 +199,8 @@ export const generateResponse = async (
               if (fnName === "send_reaction") {
                   if (onReaction) {
                       await onReaction(args.emoji);
-                      result = "Reaction sent successfully. Stop generating text.";
-                      // If reaction is sent, we usually stop. But we need to return something to the model so it can finalize (or empty).
-                      // We can return a specific hint to the model to stop.
+                      result = "Reaction sent successfully. Conversation closed.";
+                      reactionSent = true;
                   } else {
                       result = "Reaction tool not supported in this context.";
                   }
@@ -205,14 +213,16 @@ export const generateResponse = async (
               });
           }
 
+          // If we reacted, stop here and return empty (Silent).
+          // We don't need to call the model again if the intent was just to react.
+          if (reactionSent) return "";
+
           // Re-run model to get final response
           const secondResponse = await client.chat.completions.create({
             messages: messages as any,
             model: deployment
           });
           const content = secondResponse.choices[0].message.content;
-           // If we reacted, we probably want to be silent or very brief.
-           // The instructions say "DO NOT generate text". The model should know this from the system prompt + tool result.
            if (content) return formatForTelegram(content);
            return ""; // Empty string if it decided to stop
       }
