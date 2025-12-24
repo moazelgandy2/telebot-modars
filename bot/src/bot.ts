@@ -85,6 +85,62 @@ app.post("/reload", async (req, res) => {
     res.json({ success: true, message: "Bot restarted and cache cleared" });
 });
 
+app.use(express.json());
+
+app.post("/broadcast", async (req, res) => {
+    try {
+        const { message } = req.body;
+        if (!message) {
+            return res.status(400).json({ success: false, error: "Message content is required" });
+        }
+
+        if (!client || !client.connected) {
+             return res.status(503).json({ success: false, error: "Telegram Client not connected" });
+        }
+
+        console.log("Starting broadcast...");
+
+        // 1. Fetch Subscribers
+        const subRes = await fetch(`${config.apiBaseUrl}/subscription`);
+        const subJson: any = await subRes.json();
+
+        if (!subJson.success || !Array.isArray(subJson.data)) {
+             return res.status(500).json({ success: false, error: "Failed to fetch subscribers" });
+        }
+
+        const now = new Date();
+        const targets = subJson.data.filter((s: any) => {
+            const startDate = new Date(s.startDate);
+            const endDate = s.endDate ? new Date(s.endDate) : null;
+            return startDate <= now && (!endDate || endDate >= now);
+        });
+
+        console.log(`Found ${targets.length} active subscribers out of ${subJson.data.length} total.`);
+
+        let successCount = 0;
+        let failCount = 0;
+
+        // 2. Send Loop
+        for (const sub of targets) {
+            try {
+                await client.sendMessage(sub.userId, { message: message });
+                successCount++;
+                // Slight delay to avoid flood limits
+                await new Promise(r => setTimeout(r, 200));
+            } catch (e) {
+                console.error(`Failed to send to ${sub.userId}:`, e);
+                failCount++;
+            }
+        }
+
+        res.json({ success: true, total: targets.length, sent: successCount, failed: failCount });
+
+    } catch (e: any) {
+        console.error("Broadcast Error:", e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 app.listen(config.reloadPort, () => {
-    console.log(`Reload server listening on port ${config.reloadPort}`);
+    console.log(`Bot Server listening on port ${config.reloadPort}`);
 });

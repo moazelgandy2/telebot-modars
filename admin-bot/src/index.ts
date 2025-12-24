@@ -36,7 +36,8 @@ interface UserState {
     | 'WAITING_ADD_ADMIN_ID' | 'WAITING_ADD_ADMIN_NAME' | 'WAITING_ADD_ADMIN_ROLE' | 'WAITING_ADD_ADMIN_PERMS'
     | 'WAITING_DEL_ADMIN'
     | 'WAITING_EDIT_ADMIN_ID' | 'WAITING_EDIT_ADMIN_SELECT' | 'WAITING_EDIT_ADMIN_NAME'
-    | 'WAITING_SET_HOURS_START' | 'WAITING_SET_HOURS_END';
+    | 'WAITING_SET_HOURS_START' | 'WAITING_SET_HOURS_END'
+    | 'WAITING_BROADCAST_MSG' | 'WAITING_BROADCAST_CONFIRM';
   page?: number;
   tempData?: any;
 }
@@ -159,7 +160,9 @@ const UsersMenu = Markup.inlineKeyboard([
 const SystemMenu = Markup.inlineKeyboard([
   [Markup.button.callback("عرض الحالية 👀", "system_view")],
   [Markup.button.callback("تعديل التعليمات ✏️", "system_edit")],
+  [Markup.button.callback("تعديل التعليمات ✏️", "system_edit")],
   [Markup.button.callback("🕰️ ساعات العمل", "hours_view")],
+  [Markup.button.callback("📢 إذاعة (للجميع) 📡", "broadcast_start")],
   [BackToMainBtn]
 ]);
 
@@ -521,7 +524,23 @@ bot.on("text", async (ctx) => {
     const text = ctx.message.text.trim();
 
     // Add Admin Flow
-    if (state.action === 'WAITING_ADD_ADMIN_ID') {
+    if (state.action === 'WAITING_BROADCAST_MSG') {
+      const msg = text;
+      setState(userId, { action: 'WAITING_BROADCAST_CONFIRM', tempData: { msg } });
+      await ctx.reply(
+          `📢 **معاينة الرسالة:**\n\n\`${msg}\`\n\n⚠️ **متأكد إنك عايز تبعتها لكل الناس؟**`,
+          {
+              parse_mode: "Markdown",
+              ...Markup.inlineKeyboard([
+                  [Markup.button.callback("✅ نعم، ابعت حالاً", "broadcast_send")],
+                  [CancelBtn]
+              ])
+          }
+      );
+      return;
+  }
+
+  if (state.action === 'WAITING_ADD_ADMIN_ID') {
         setState(userId, { action: 'WAITING_ADD_ADMIN_NAME', tempData: { id: text } });
         await ctx.reply(`✅ الآيدي: \`${text}\`\n\n👤 **(2/4) الاسم إيه؟**`, { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
         return;
@@ -979,7 +998,47 @@ bot.action("hours_set_end", (ctx) => {
     ctx.editMessageText("🔴 **تعديل وقت النهاية**\n\nدخل الوقت بصيغة 24 ساعة (مثال: `23:00`).", { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup });
 });
 
-// --- FAQ Handlers ---
+// --- Broadcast Handlers ---
+bot.action("broadcast_start", (ctx) => {
+    setState(ctx.from!.id, { action: 'WAITING_BROADCAST_MSG' });
+    ctx.editMessageText(
+        "📢 **نظام الإذاعة**\n\nابعت الرسالة اللي عايز تبعتها لكل المشتركين.\n(نص فقط حالياً)",
+        { parse_mode: "Markdown", reply_markup: Markup.inlineKeyboard([[CancelBtn]]).reply_markup }
+    );
+});
+
+bot.action("broadcast_send", async (ctx) => {
+    const state = getState(ctx.from!.id);
+    if (!state || state.action !== 'WAITING_BROADCAST_CONFIRM' || !state.tempData.msg) return;
+
+    const message = state.tempData.msg;
+
+    try {
+        await ctx.editMessageText("⏳ **جاري الإرسال...** (ممكن ياخد وقت لو العدد كبير)");
+
+        // Call User Bot API
+        const res = await axios.post(`http://localhost:${config.reloadPort}/broadcast`, { message });
+
+        if (res.data.success) {
+            await ctx.editMessageText(
+                `✅ **تم الإرسال بنجاح!**\n\n` +
+                `🎯 المستهدفين (Active): ${res.data.total}\n` +
+                `📨 وصل: ${res.data.sent}\n` +
+                `❌ فشل: ${res.data.failed}`,
+                { parse_mode: "Markdown", ...SystemMenu }
+            );
+        } else {
+             await ctx.editMessageText(`❌ فشل الإرسال: ${res.data.error}`, { ...SystemMenu });
+        }
+        clearState(ctx.from!.id);
+
+    } catch (e: any) {
+        console.error("Broadcast Logic Error:", e);
+        const err = e.response?.data?.error || e.message;
+        await ctx.editMessageText(`❌ Error: ${err}`, { ...SystemMenu });
+    }
+});
+
 bot.action(/faqs_list_(.+)/, async (ctx) => {
     const page = parseInt(ctx.match[1]);
     try {
