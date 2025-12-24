@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { MessageSquare, Settings, Users, Activity, FileText, Lock } from "lucide-react";
+import { MessageSquare, Settings, Users, Activity, FileText, Lock, Megaphone } from "lucide-react";
 import { prisma } from "@/lib/db";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -124,6 +124,20 @@ export default async function Dashboard() {
                     </CardTitle>
                     <CardDescription>
                         إضافة وإزالة المشتركين في نظام المتابعة.
+                    </CardDescription>
+                </CardHeader>
+            </Card>
+          </Link>
+
+          <Link href="/admin/broadcast" className="block h-full">
+            <Card className="h-full border-muted/40 shadow-sm hover:shadow-md hover:border-primary/30 transition-all bg-gradient-to-br from-card to-muted/20 cursor-pointer group">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 group-hover:text-primary transition-colors">
+                        <Megaphone className="w-5 h-5 text-orange-500" />
+                        نظام الإذاعة
+                    </CardTitle>
+                    <CardDescription>
+                        إرسال رسائل لجميع المشتركين النشطين.
                     </CardDescription>
                 </CardHeader>
             </Card>

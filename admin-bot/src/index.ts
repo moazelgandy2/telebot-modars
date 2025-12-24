@@ -143,6 +143,10 @@ const getMainMenu = (admin: AdminUser) => {
     }
     if (row2.length > 0) buttons.push(row2);
 
+    if (hasPermission(admin, 'MANAGE_CONTENT')) {
+         buttons.push([Markup.button.callback("📢 إذاعة (للجميع) 📡", "broadcast_start")]);
+    }
+
     if (hasPermission(admin, 'MANAGE_ADMINS') || admin.role === 'SUPER_ADMIN') {
         buttons.push([Markup.button.callback("👮 المساعدين (Admins)", "menu_admins")]);
     }
@@ -160,7 +164,7 @@ const UsersMenu = Markup.inlineKeyboard([
 const SystemMenu = Markup.inlineKeyboard([
   [Markup.button.callback("عرض الحالية 👀", "system_view")],
   [Markup.button.callback("تعديل التعليمات ✏️", "system_edit")],
-  [Markup.button.callback("تعديل التعليمات ✏️", "system_edit")],
+
   [Markup.button.callback("🕰️ ساعات العمل", "hours_view")],
   [Markup.button.callback("📢 إذاعة (للجميع) 📡", "broadcast_start")],
   [BackToMainBtn]
