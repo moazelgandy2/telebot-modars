@@ -182,7 +182,7 @@ const startScheduler = () => {
             // Fetch Schedules
             const res = await fetch(`${config.apiBaseUrl}/schedule`);
             if (!res.ok) return;
-            const schedules: any[] = await res.json();
+            const schedules = (await res.json()) as any[];
 
             // Egypt Time
             const egyptTime = new Date().toLocaleTimeString("en-US", { timeZone: "Africa/Cairo", hour12: false }); // "14:30:05" or "14:30"

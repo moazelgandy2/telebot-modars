@@ -15,7 +15,7 @@ export const getHistory = async (userId: string | number): Promise<{ messages: C
     );
     if (!res.ok) return { messages: [] };
 
-    const data = await res.json();
+    const data = (await res.json()) as any;
     let rawMessages: any[] = [];
     let summary: string | undefined = undefined;
     let metadata: any | undefined = undefined;
@@ -57,9 +57,9 @@ export const getHistory = async (userId: string | number): Promise<{ messages: C
       if (parts.length === 0) parts.push({ text: "" });
 
       return {
-        role: msg.role === "user" ? "user" : (msg.role === "assistant" ? "assistant" : "model"),
+        role: (msg.role === "user" ? "user" : (msg.role === "assistant" ? "assistant" : "model")),
         parts: parts,
-      };
+      } as ChatMessage;
     });
 
     return { messages, summary, metadata };
