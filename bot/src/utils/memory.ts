@@ -5,7 +5,7 @@ export interface ChatMessage {
   parts: { text: string; image_url?: { url: string } }[];
 }
 
-export const getHistory = async (userId: string | number): Promise<ChatMessage[]> => {
+export const getHistory = async (userId: string | number): Promise<{ messages: ChatMessage[], summary?: string, metadata?: any }> => {
   try {
     const res = await fetch(
       `${config.apiBaseUrl}/chat/history?userId=${userId}`,
@@ -13,10 +13,22 @@ export const getHistory = async (userId: string | number): Promise<ChatMessage[]
         cache: "no-store",
       }
     );
-    if (!res.ok) return [];
+    if (!res.ok) return { messages: [] };
 
-    const messages = (await res.json()) as any[];
-    return messages.map((msg: any) => {
+    const data = await res.json();
+    let rawMessages: any[] = [];
+    let summary: string | undefined = undefined;
+    let metadata: any | undefined = undefined;
+
+    if (Array.isArray(data)) {
+        rawMessages = data; // Legacy fallback
+    } else {
+        rawMessages = data.messages || [];
+        summary = data.summary;
+        metadata = data.metadata;
+    }
+
+    const messages = rawMessages.map((msg: any) => {
       const parts: any[] = [];
 
       // 1. Text Content
@@ -49,9 +61,11 @@ export const getHistory = async (userId: string | number): Promise<ChatMessage[]
         parts: parts,
       };
     });
+
+    return { messages, summary, metadata };
   } catch (error) {
     console.error("Error fetching history:", error);
-    return [];
+    return { messages: [] };
   }
 };
 
@@ -87,4 +101,23 @@ export const clearHistory = async (userId: string | number) => {
   } catch (error) {
     console.error("Error clearing history:", error);
   }
+};
+
+export const updateSession = async (
+    userId: string | number,
+    updates: { summary?: string, metadata?: any }
+) => {
+    try {
+        await fetch(`${config.apiBaseUrl}/chat/history`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                userId: userId.toString(),
+                role: "system",
+                content: "", // Empty to skip creating visible message if API allowed it, but API requires logic.
+                // We rely on API processing summary/metadata even if content is empty.
+                ...updates
+            }),
+        });
+    } catch (e) { console.error("Update Session Error", e); }
 };

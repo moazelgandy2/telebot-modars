@@ -116,16 +116,70 @@ const tools: any[] = [
     }
 ];
 
+import { updateSession } from "../utils/memory.js";
+
+// ... (other imports)
+
+// Separate Summarization Logic
+const performSummarization = async (userId: string, history: ChatMessage[], currentSummary?: string, currentMetadata?: any) => {
+    console.log(`[Memory] Triggering summarization for ${userId}...`);
+    try {
+        const recent = history.slice(-20); // Summarize last 20 messages
+        // We only want text
+        const conversationText = recent.map(m => `${m.role}: ${m.parts.map(p => p.text).join(" ")}`).join("\n");
+
+        const prompt = `
+        You are an expert memory assistant.
+        Refine the following summary and user profile based on the new conversation.
+
+        Current Summary: ${currentSummary || "None"}
+        Current Profile: ${JSON.stringify(currentMetadata || {})}
+
+        New Conversation:
+        ${conversationText}
+
+        Output a JSON object with:
+        1. "summary": A concise, running summary of the conversation history (keep important facts, discard chit-chat).
+        2. "profile": Updated user profile (extract name, grade, interests, etc.). Merge with current.
+
+        JSON ONLY.
+        `;
+
+        const response = await client.chat.completions.create({
+            messages: [{ role: "user", content: prompt }],
+            model: deployment, // Use the same deployment
+            response_format: { type: "json_object" }
+        });
+
+        const content = response.choices[0].message.content;
+        if (content) {
+            const result = JSON.parse(content);
+            console.log(`[Memory] Updated for ${userId}:`, result);
+            await updateSession(userId, { summary: result.summary, metadata: result.profile });
+        }
+    } catch (e) {
+        console.error("[Memory] Summarization failed:", e);
+    }
+};
+
 export const generateResponse = async (
   history: ChatMessage[],
   attachments?: { url: string; type: string }[],
   sendIntermediateMessage?: (msg: string) => Promise<void>,
   isSubscribed?: boolean,
   userId?: string,
-  onReaction?: (emoji: string) => Promise<void>
+  onReaction?: (emoji: string) => Promise<void>,
+  summary?: string,
+  metadata?: any
 ): Promise<string> => {
   if (!config.openaiApiKey) {
     return "OpenAI API key is missing in configuration.";
+  }
+
+  // Trigger Background Summarization everyday 10 messages
+  if (userId && history.length > 0 && history.length % 10 === 0) {
+      // Fire and forget
+      performSummarization(userId, history, summary, metadata).catch(e => console.error(e));
   }
 
   const systemInstruction = await getSystemInstruction();
@@ -138,10 +192,16 @@ export const generateResponse = async (
 
   // Inject User Context with Timestamp (Optimization)
   const nowStr = new Date().toLocaleTimeString('en-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
-  const userContext = `\n\n[USER CONTEXT]\nTime: ${nowStr}\nSubscription Status: ${isSubscribed ? "ACTIVE (PREMIUM)" : "INACTIVE (FREE)"}\nUser ID: ${userId || "Unknown"}`;
-  const enhancedSystemInstruction = systemInstruction + knowledgeBase + userContext;
 
-  const recentHistory = history.slice(-20);
+  let memoryContext = "";
+  if (summary) memoryContext += `\n\n## 🧠 MEMORY SUMMARY:\n${summary}`;
+  if (metadata && Object.keys(metadata).length > 0) memoryContext += `\n\n## 👤 USER PROFILE:\n${JSON.stringify(metadata, null, 2)}`;
+
+  const userContext = `\n\n[USER CONTEXT]\nTime: ${nowStr}\nSubscription Status: ${isSubscribed ? "ACTIVE (PREMIUM)" : "INACTIVE (FREE)"}\nUser ID: ${userId || "Unknown"}`;
+
+  const enhancedSystemInstruction = systemInstruction + knowledgeBase + memoryContext + userContext;
+
+  const recentHistory = history.slice(-100);
   const messages: any[] = [
     { role: "system", content: enhancedSystemInstruction },
     ...recentHistory.map((msg) => {

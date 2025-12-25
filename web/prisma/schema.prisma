@@ -17,6 +17,8 @@ model ChatSession {
   userId    String        @unique
   username  String?
   messages  ChatMessage[]
+  summary   String?
+  metadata  Json?         @default("{}")
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 }
@@ -64,6 +66,28 @@ model Subscription {
   updatedAt DateTime @updatedAt
   startDate DateTime @default(now())
   endDate   DateTime?
+}
+
+model Broadcast {
+  id          String   @id @default(uuid())
+  message     String
+  status      String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  recipients  Json?    // Optional: Store specific list of userIds if needed, otherwise all active subs.
+  sentCount   Int      @default(0)
+  failedCount Int      @default(0)
+  log         Json?    // Detailed log of failures
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ScheduledBroadcast {
+  id        String   @id @default(uuid())
+  message   String
+  time      String   // "HH:MM" 24-hour format
+  isActive  Boolean  @default(true)
+  lastRunAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Admin {

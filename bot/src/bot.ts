@@ -87,25 +87,24 @@ app.post("/reload", async (req, res) => {
 
 app.use(express.json());
 
-app.post("/broadcast", async (req, res) => {
+// --- Broadcast Worker (Polling Queue) ---
+const processBroadcastJob = async (job: any) => {
+    if (!client || !client.connected) return;
+    console.log(`[Worker] Processing Broadcast ID: ${job.id}`);
+
     try {
-        const { message } = req.body;
-        if (!message) {
-            return res.status(400).json({ success: false, error: "Message content is required" });
-        }
+        // 1. Mark Processing
+        await fetch(`${config.apiBaseUrl}/broadcast`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: job.id, status: 'PROCESSING' })
+        });
 
-        if (!client || !client.connected) {
-             return res.status(503).json({ success: false, error: "Telegram Client not connected" });
-        }
-
-        console.log("Starting broadcast...");
-
-        // 1. Fetch Subscribers
+        // 2. Fetch Active Subs
         const subRes = await fetch(`${config.apiBaseUrl}/subscription`);
         const subJson: any = await subRes.json();
-
         if (!subJson.success || !Array.isArray(subJson.data)) {
-             return res.status(500).json({ success: false, error: "Failed to fetch subscribers" });
+            throw new Error("Failed to fetch subscribers");
         }
 
         const now = new Date();
@@ -115,31 +114,126 @@ app.post("/broadcast", async (req, res) => {
             return startDate <= now && (!endDate || endDate >= now);
         });
 
-        console.log(`Found ${targets.length} active subscribers out of ${subJson.data.length} total.`);
-
         let successCount = 0;
         let failCount = 0;
+        const failedIds: string[] = [];
 
-        // 2. Send Loop
+        // 3. Send Loop
         for (const sub of targets) {
             try {
-                await client.sendMessage(sub.userId, { message: message });
-                successCount++;
-                // Slight delay to avoid flood limits
-                await new Promise(r => setTimeout(r, 200));
+                if (sub.userId) {
+                    await client.sendMessage(sub.userId, { message: job.message });
+                    successCount++;
+                    await new Promise(r => setTimeout(r, 200)); // Rate limit
+                }
             } catch (e) {
-                console.error(`Failed to send to ${sub.userId}:`, e);
                 failCount++;
+                failedIds.push(sub.userId);
             }
         }
 
-        res.json({ success: true, total: targets.length, sent: successCount, failed: failCount });
+        // 4. Mark Completed
+        await fetch(`${config.apiBaseUrl}/broadcast`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: job.id,
+                status: 'COMPLETED',
+                sentCount: successCount,
+                failedCount: failCount,
+                log: { failedIds }
+            })
+        });
+        console.log(`[Worker] Broadcast ${job.id} Completed. Sent: ${successCount}, Failed: ${failCount}`);
 
     } catch (e: any) {
-        console.error("Broadcast Error:", e);
-        res.status(500).json({ success: false, error: e.message });
+        console.error(`[Worker] Failed job ${job.id}:`, e);
+        // Mark Failed
+        await fetch(`${config.apiBaseUrl}/broadcast`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: job.id, status: 'FAILED', log: { error: e.message } })
+        });
     }
-});
+};
+
+const startBroadcastWorker = () => {
+    setInterval(async () => {
+        try {
+            if (!client || !client.connected) return;
+            // Fetch PENDING
+            const res = await fetch(`${config.apiBaseUrl}/broadcast?status=PENDING`);
+            if (res.ok) {
+                const list = await res.json();
+                if (Array.isArray(list) && list.length > 0) {
+                    await processBroadcastJob(list[0]);
+                }
+            }
+        } catch (e) {
+            console.error("[Worker] Polling Error:", e);
+        }
+    }, 30000); // Check every 30s
+    console.log("Broadcast Worker Started (Polling 30s).");
+};
+
+const startScheduler = () => {
+    setInterval(async () => {
+        try {
+            // Fetch Schedules
+            const res = await fetch(`${config.apiBaseUrl}/schedule`);
+            if (!res.ok) return;
+            const schedules: any[] = await res.json();
+
+            // Egypt Time
+            const egyptTime = new Date().toLocaleTimeString("en-US", { timeZone: "Africa/Cairo", hour12: false }); // "14:30:05" or "14:30"
+            const [currentH, currentM] = egyptTime.split(":").map(Number);
+
+            const todayStr = new Date().toLocaleDateString("en-US", { timeZone: "Africa/Cairo" });
+
+            for (const task of schedules) {
+                if (!task.isActive) continue;
+
+                // Check Time Match
+                const [targetH, targetM] = task.time.split(":").map(Number);
+
+                // Matches minute (simple check)
+                if (currentH === targetH && currentM === targetM) {
+
+                    // Check if already run today
+                    if (task.lastRunAt) {
+                        const lastRunDate = new Date(task.lastRunAt).toLocaleDateString("en-US", { timeZone: "Africa/Cairo" });
+                        if (lastRunDate === todayStr) continue; // Already run today
+                    }
+
+                    console.log(`[Scheduler] Triggering Task ${task.id} at ${task.time}`);
+
+                    // 1. Create Broadcast Job
+                    await fetch(`${config.apiBaseUrl}/broadcast`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: task.message })
+                    });
+
+                    // 2. Update Last Run
+                    await fetch(`${config.apiBaseUrl}/schedule`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: task.id, lastRunAt: new Date() })
+                    });
+                }
+            }
+
+        } catch (e) { console.error("[Scheduler] Error:", e); }
+    }, 60000); // Every minute
+    console.log("Scheduler Started (Checking every minute).");
+};
+
+// Start Workers
+startBroadcastWorker();
+startScheduler();
+
+app.use(express.json());
+// app.post("/broadcast") removed in favor of worker.
 
 app.listen(config.reloadPort, () => {
     console.log(`Bot Server listening on port ${config.reloadPort}`);

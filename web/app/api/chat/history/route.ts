@@ -17,7 +17,11 @@ export async function GET(req: NextRequest) {
           },
         },
       });
-      return NextResponse.json(session?.messages || []);
+      return NextResponse.json({
+          messages: session?.messages || [],
+          summary: session?.summary,
+          metadata: session?.metadata,
+      });
     } else {
       // Get all sessions (for list view) with Search & Pagination
       const q = searchParams.get("q") || "";
@@ -61,7 +65,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: Request) {
   try {
-    const { userId, role, content, attachments, username } = await req.json();
+    const reqBody = await req.json();
+    const { userId, role, content, attachments, username } = reqBody;
 
     if (!userId || !role) {
       if (!content && (!attachments || attachments.length === 0)) {
@@ -109,10 +114,14 @@ export async function POST(req: Request) {
       include: { attachments: true }
     });
 
-    // Update session timestamp
+    // Update session timestamp and optionally summary/metadata
+    const updateData: any = { updatedAt: new Date() };
+    if (reqBody.summary) updateData.summary = reqBody.summary;
+    if (reqBody.metadata) updateData.metadata = reqBody.metadata;
+
     await prisma.chatSession.update({
         where: { id: session.id },
-        data: { updatedAt: new Date() }
+        data: updateData
     });
 
     return NextResponse.json(message);

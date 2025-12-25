@@ -37,7 +37,8 @@ interface UserState {
     | 'WAITING_DEL_ADMIN'
     | 'WAITING_EDIT_ADMIN_ID' | 'WAITING_EDIT_ADMIN_SELECT' | 'WAITING_EDIT_ADMIN_NAME'
     | 'WAITING_SET_HOURS_START' | 'WAITING_SET_HOURS_END'
-    | 'WAITING_BROADCAST_MSG' | 'WAITING_BROADCAST_CONFIRM';
+    | 'WAITING_BROADCAST_MSG' | 'WAITING_BROADCAST_CONFIRM'
+    | 'WAITING_SCHEDULE_MSG' | 'WAITING_SCHEDULE_TIME' | 'WAITING_SCHEDULE_CONFIRM';
   page?: number;
   tempData?: any;
 }
@@ -144,7 +145,10 @@ const getMainMenu = (admin: AdminUser) => {
     if (row2.length > 0) buttons.push(row2);
 
     if (hasPermission(admin, 'MANAGE_CONTENT')) {
-         buttons.push([Markup.button.callback("📢 إذاعة (للجميع) 📡", "broadcast_start")]);
+         buttons.push([
+             Markup.button.callback("📢 إذاعة (فوري) 📡", "broadcast_start"),
+             Markup.button.callback("📅 جدولة يومية ⏰", "schedule_start")
+         ]);
     }
 
     if (hasPermission(admin, 'MANAGE_ADMINS') || admin.role === 'SUPER_ADMIN') {
@@ -360,6 +364,85 @@ bot.action("toggle_target", async (ctx) => {
 });
 bot.action("menu_faqs", (ctx) => ctx.editMessageText("❓ **إدارة الأسئلة**", { parse_mode: "Markdown", ...FaqsMenu }));
 bot.action("menu_admins", (ctx) => ctx.editMessageText("👮 **إدارة الآدمنز**", { parse_mode: "Markdown", ...AdminsMenu }));
+
+// --- Broadcast Actions ---
+const BroadcastMenu = Markup.inlineKeyboard([
+    [Markup.button.callback("إلغاء ❌", "cancel_action")]
+]);
+
+bot.action("broadcast_start", (ctx) => {
+    setState(ctx.from!.id, { action: 'WAITING_BROADCAST_MSG', tempData: {} });
+    ctx.editMessageText("📢 **رسالة جماعية**\n\nاكتب الرسالة اللي عايز تبعتها لكل المشتركين دلوقتي:", { parse_mode: "Markdown", ...BroadcastMenu });
+});
+
+bot.action("broadcast_confirm", async (ctx) => {
+    const state = getState(ctx.from!.id);
+    if (!state || !state.tempData || !state.tempData.message) return;
+
+    const message = state.tempData.message;
+
+    try {
+        await ctx.editMessageText("⏳ **جاري الإرسال...**\nممكن ياخد وقت شوية، خليك منتظر.");
+
+        // 1. Fetch Subscribers
+        const subRes = await axios.get(`${config.apiBaseUrl}/subscription`);
+        if (!subRes.data.success || !Array.isArray(subRes.data.data)) {
+             await ctx.editMessageText("❌ فشل في تحميل المشتركين.");
+             return;
+        }
+
+        // Filter users who have telegram IDs (userId)
+        const users = subRes.data.data.map((u: any) => u.userId).filter((id: string) => id);
+
+        if (users.length === 0) {
+             await ctx.editMessageText("⚠️ مفيش مشتركين حالياً.");
+             return;
+        }
+
+        // 2. Queue in DB (Decoupled)
+        const broadcastRes = await axios.post(`${config.apiBaseUrl}/broadcast`, {
+            message: message,
+            // We don't send userIds here, the worker will fetch subscriptions.
+            // Or we can send them if we want to filter specific subsets (e.g. active only).
+            // For now, let's keep it simple: Worker fetches active subs.
+        });
+
+        if (broadcastRes.data.success) {
+            await ctx.editMessageText(`✅ **تمت الجدولة بنجاح!**\n\nالرسالة دخلت الطابور وهتتبعت لكل المشتركين تدريجياً.`, { parse_mode: "Markdown", ...Markup.inlineKeyboard([[BackToMainBtn]]) });
+        } else {
+            await ctx.editMessageText(`❌ فشل الجدولة: ${broadcastRes.data.error}`, { parse_mode: "Markdown", ...Markup.inlineKeyboard([[BackToMainBtn]]) });
+        }
+
+    } catch (e: any) {
+        console.error("Broadcast Error:", e);
+        const err = e.response?.data?.error || e.message || "Unknown Error";
+        await ctx.editMessageText(`❌ **حدث خطأ:**\n\`${err}\``, { parse_mode: "Markdown", ...Markup.inlineKeyboard([[BackToMainBtn]]) });
+    }
+    clearState(ctx.from!.id);
+});
+
+// --- Scheduled Broadcast Actions ---
+bot.action("schedule_start", (ctx) => {
+    setState(ctx.from!.id, { action: 'WAITING_SCHEDULE_MSG', tempData: {} });
+    ctx.editMessageText("📅 **جدولة رسالة يومية**\n\nاكتب الرسالة اللي عايزها تتبعت بشكل متكرر:", { parse_mode: "Markdown", ...BroadcastMenu });
+});
+
+bot.action("schedule_confirm", async (ctx) => {
+    const state = getState(ctx.from!.id);
+    if (!state || !state.tempData || !state.tempData.message || !state.tempData.time) return;
+
+    try {
+        await axios.post(`${config.apiBaseUrl}/schedule`, {
+            message: state.tempData.message,
+            time: state.tempData.time
+        });
+        await ctx.editMessageText(`✅ **تم حفظ الجدولة!**\n\nالرسالة هتتبعت يومياً الساعة ${state.tempData.time} (بتوقيت مصر).`, { parse_mode: "Markdown", ...Markup.inlineKeyboard([[BackToMainBtn]]) });
+    } catch (e) {
+        console.error("Schedule Error:", e);
+        await ctx.editMessageText(`❌ فشل الحفظ. حاولت تاني.`, { parse_mode: "Markdown", ...Markup.inlineKeyboard([[BackToMainBtn]]) });
+    }
+    clearState(ctx.from!.id);
+});
 
 // --- Admin Management Flows ---
 
@@ -805,6 +888,42 @@ bot.on("text", async (ctx) => {
       }
       return;
   }
+
+  // Broadcast Text Handler
+  if ((state.action as string) === 'WAITING_BROADCAST_MSG') {
+      setState(userId, { action: 'WAITING_BROADCAST_CONFIRM', tempData: { message: text } });
+
+      const confirmMenu = Markup.inlineKeyboard([
+          [Markup.button.callback("🚀 إرسال الآن", "broadcast_confirm")],
+          [Markup.button.callback("إلغاء ❌", "cancel_action")]
+      ]);
+
+      await ctx.reply(`📢 **مراجعة الرسالة:**\n\n"${text}"\n\nهل أنت متأكد إنك عايز تبعتها لجميع المشتركين؟`, { parse_mode: "Markdown", ...confirmMenu });
+      return;
+  }
+
+  // Schedule Text Handlers
+  if (state.action === 'WAITING_SCHEDULE_MSG') {
+      setState(userId, { action: 'WAITING_SCHEDULE_TIME', tempData: { message: text } });
+      await ctx.reply(`⏰ **امتى عايز تبعتها؟**\n\nاكتب الوقت بصيغة \`HH:MM\` (24 ساعة)\nمثال: \`05:00\` عشان 5 الفجر.`, { parse_mode: "Markdown", reply_markup: BroadcastMenu.reply_markup });
+      return;
+  }
+
+  if (state.action === 'WAITING_SCHEDULE_TIME') {
+      const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+      if (!timeRegex.test(text)) {
+          await ctx.reply("⚠️ صيغة غلط. لازم `HH:MM` زي `14:30`.", { parse_mode: "Markdown" });
+          return;
+      }
+
+      setState(userId, { action: 'WAITING_SCHEDULE_CONFIRM', tempData: { ...state.tempData, time: text } });
+      const confirmMenu = Markup.inlineKeyboard([
+          [Markup.button.callback("💾 حفظ الجدولة", "schedule_confirm")],
+          [Markup.button.callback("إلغاء ❌", "cancel_action")]
+      ]);
+      await ctx.reply(`📅 **مراجعة الجدولة:**\n\n📝 الرسالة: "${state.tempData.message}"\n⏰ الوقت: ${text}\n\nمتأكد؟`, { parse_mode: "Markdown", ...confirmMenu });
+      return;
+  }
 });
 
 // --- Users Management Handlers ---
@@ -1021,7 +1140,7 @@ bot.action("broadcast_send", async (ctx) => {
         await ctx.editMessageText("⏳ **جاري الإرسال...** (ممكن ياخد وقت لو العدد كبير)");
 
         // Call User Bot API
-        const res = await axios.post(`http://localhost:${config.reloadPort}/broadcast`, { message });
+        const res = await axios.post(`${config.userBotUrl}/broadcast`, { message });
 
         if (res.data.success) {
             await ctx.editMessageText(

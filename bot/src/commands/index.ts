@@ -88,7 +88,7 @@ const processAggregatedMessage = async (client: TelegramClient, userId: string, 
 
         // Check Subscription
         const isSubscribed = await checkSubscription(userId.toString());
-        const history = await getHistory(userId);
+        const { messages: history, summary, metadata } = await getHistory(userId);
 
         const response = await generateResponse(
             history,
@@ -104,7 +104,9 @@ const processAggregatedMessage = async (client: TelegramClient, userId: string, 
                         reaction: [new Api.ReactionEmoji({ emoticon: emoji })]
                     }));
                 } catch(e) { console.error("Reaction failed:", e); }
-            }
+            },
+            summary,
+            metadata
         );
 
         if (response) {
@@ -163,7 +165,7 @@ const processAggregatedMedia = async (client: TelegramClient, userId: string, st
         await addToHistory(userId, "user", userPrompt, username);
 
         const isSubscribed = await checkSubscription(userId.toString());
-        const history = await getHistory(userId);
+        const { messages: history, summary, metadata } = await getHistory(userId);
 
         const response = await generateResponse(
             history,
@@ -179,7 +181,9 @@ const processAggregatedMedia = async (client: TelegramClient, userId: string, st
                         reaction: [new Api.ReactionEmoji({ emoticon: emoji })]
                     }));
                 } catch(e) { console.error("Reaction failed:", e); }
-            }
+            },
+            summary,
+            metadata
         );
 
         if (response) {
