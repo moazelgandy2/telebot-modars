@@ -59,12 +59,12 @@ model FAQ {
 }
 
 model Subscription {
-  id        String   @id @default(uuid())
-  userId    String   @unique // The specific ID used for checking
+  id        String    @id @default(uuid())
+  userId    String    @unique // The specific ID used for checking
   name      String? // Optional name
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  startDate DateTime @default(now())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  startDate DateTime  @default(now())
   endDate   DateTime?
 }
 
@@ -72,22 +72,22 @@ model Broadcast {
   id          String   @id @default(uuid())
   message     String
   status      String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
-  recipients  Json?    // Optional: Store specific list of userIds if needed, otherwise all active subs.
+  recipients  Json? // Optional: Store specific list of userIds if needed, otherwise all active subs.
   sentCount   Int      @default(0)
   failedCount Int      @default(0)
-  log         Json?    // Detailed log of failures
+  log         Json? // Detailed log of failures
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
 model ScheduledBroadcast {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   message   String
-  time      String   // "HH:MM" 24-hour format
-  isActive  Boolean  @default(true)
+  time      String // "HH:MM" 24-hour format
+  isActive  Boolean   @default(true)
   lastRunAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model Admin {
@@ -97,4 +97,19 @@ model Admin {
   role        String   @default("ADMIN")
   permissions String[]
   createdAt   DateTime @default(now())
+}
+
+model PendingResponse {
+  id           String   @id @default(uuid())
+  userId       String
+  message      String
+  replyToMsgId Int?
+  scheduledFor DateTime
+  status       String   @default("PENDING") // PENDING, SENT, FAILED
+  typingStatus Boolean  @default(false) // Whether typing has Been triggered
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([scheduledFor])
+  @@index([status])
 }

@@ -19,6 +19,16 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+
+    // Explicit validation for responseDelay if present
+    if (body.responseDelay !== undefined) {
+      const delay = parseInt(String(body.responseDelay), 10);
+      if (isNaN(delay) || delay < 0) {
+        return NextResponse.json({ success: false, error: 'تأخير الرد يجب أن يكون رقماً موجباً' }, { status: 400 });
+      }
+      body.responseDelay = String(delay);
+    }
+
     const updates = Object.entries(body).map(([key, value]) => {
       return prisma.botSetting.upsert({
         where: { key },

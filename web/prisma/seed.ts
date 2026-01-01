@@ -8,7 +8,14 @@ const DATA_DIR = path.resolve(__dirname, '../../bot/data');
 
 async function main() {
   console.log('Seeding database...');
-  console.log(`Reading data from ${DATA_DIR}`);
+
+  await prisma.botSetting.upsert({
+    where: { key: 'responseDelay' },
+    update: {},
+    create: { key: 'responseDelay', value: '0' },
+  });
+
+  console.log('Seed completed.');
 }
 
 main()
